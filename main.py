@@ -23,6 +23,7 @@ last_draw_time = 0
 plt.ion()
 fig, ax1 = plt.subplots()
 ax1.set_autoscale_on(True)
+ax1.set_title("Photoresistor Sensor Data (Current: NaN lx)\n")
 ax1.set_ylabel("Sensor Value (lx)")
 ax1.set_xlabel("Time (ms)")
 line, = ax1.plot([], [], "r-")
@@ -74,6 +75,7 @@ while True:
                 print(unpack)
                 pass
 
+            if pin == 0: # Workaround for only measuring 1 pin
                 continue
             
             if time == 0:
@@ -107,11 +109,11 @@ while True:
         ax1.relim()
         ax1.autoscale_view(True, True, True)
         ax1.set_title("Photoresistor Sensor Data (Current: %i lx)\n" % resistor_data[-1])
+
         if (Y_RANGE_LOW > 0) and (Y_RANGE_HIGH > 0):
             ax1.set_ylim(Y_RANGE_LOW, Y_RANGE_HIGH)
         else:
             ax1.set_ylim(min(resistor_data), max(resistor_data))
-
 
         # Speeds up drawing tremendously
         ax1.draw_artist(ax1.patch)

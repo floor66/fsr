@@ -1,35 +1,35 @@
-int resistor1Pin = 0;
-int resistor2Pin = 1;
-int res1Val = 0;
-int res2Val = 0;
+int sensorPins[] = {0, 1, 2, 3, 4, 5};
+int sensorVal = 0;
+int sensorCount = sizeof(sensorPins) / sizeof(int);
 unsigned long t = 0;
 
 void setup()
 {
-  // Setup
   Serial.begin(9600);
-  pinMode(resistor1Pin, INPUT);
-  pinMode(resistor2Pin, INPUT);
   Serial.println(" ");
-  //Key: time (ms), pin number (A0-5), resistor value (0-1024)
+
+  // Initialize pins
+  for(int i = 0; i < sensorCount; i++) {
+    pinMode(sensorPins[i], INPUT);
+    Serial.print("Initialized sensor on pin ");
+    Serial.println(sensorPins[i]);
+  }
+
+  Serial.println("INIT_COMPLETE");
 }
 
 void loop()
 {
-  // Loop
-  t = millis();
+  // Key: time (ms), pin number (A0-5), resistor value (0-1024)
 
-  res1Val = analogRead(resistor1Pin);
-  Serial.print(t);
-  Serial.print(",");
-  Serial.print(resistor1Pin);
-  Serial.print(",");
-  Serial.println(res1Val);
-
-  res2Val = analogRead(resistor2Pin);
-  Serial.print(t);
-  Serial.print(",");
-  Serial.print(resistor2Pin);
-  Serial.print(",");
-  Serial.println(res2Val);
+  for(int i = 0; i < sensorCount; i++) {
+    t = millis();
+    analogRead(sensorPins[i]);
+    sensorVal = analogRead(sensorPins[i]);
+    Serial.print(t);
+    Serial.print(",");
+    Serial.print(sensorPins[i]);
+    Serial.print(",");
+    Serial.println(sensorVal);
+  }
 }

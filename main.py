@@ -1,5 +1,8 @@
 import matplotlib.pyplot as plt
-import serial, time
+import serial
+import time
+
+millis = lambda: int(round(time.time() * 1000.0))
 
 # User defined variables
 COM_PORT = "COM5"
@@ -7,26 +10,40 @@ SAVE_FILE = "sensordata/data_%i.txt" % time.time()
 
 BAUD_RATE = 9600
 REFRESH_MS = 100
-POP_CUTOFF = 200
+POP_CUTOFF = 100 # The amount of data points to show on screen
+
+Vcc = 5.06
 
 Y_RANGE_LOW = 0
-Y_RANGE_HIGH = 0 # If both are 0, autofit is used
+Y_RANGE_HIGH = 1000 # If both are -1, autofit is used
+
+SHOW_PINS = [0, 1] # Only show from A0, A1, A..etc inputs
 
 # Variable setup, don't touch
+cols = ["b-", "r-", "g-", "b-", "m-", "c-"]
 times = []
 resistor_data = []
-count = 0
-zero_received = False # To wait for Arduino to give the first timestamp
-last_draw_time = 0
+
+for pin in SHOW_PINS:
+    times.append([])
+    resistor_data.append([])
+
+can_start = False # To wait for Arduino to give the first timestamp
 
 # Initiate matplotlib
+lines = []
 plt.ion()
 fig, ax1 = plt.subplots()
 ax1.set_autoscale_on(True)
-ax1.set_title("Photoresistor Sensor Data (Current: NaN lx)\n")
+ax1.set_title("Photoresistor Sensor Data\n")
 ax1.set_ylabel("Sensor Value (lx)")
 ax1.set_xlabel("Time (ms)")
-line, = ax1.plot([], [], "r-")
+
+# Instantiate a line for every pin we're reading
+for pin in SHOW_PINS:
+    tmp, = ax1.plot([], [], cols[pin])
+    lines.append(tmp)
+
 plt.show(block=False)
 plt.pause(0.001)
 
@@ -42,9 +59,11 @@ while not connected:
 
     time.sleep(1)
 
+# Generate a data file
 file = open(SAVE_FILE, "w")
 file.close()
 
+# Appending to data file
 def save_data(data):
     try:
         file = open(SAVE_FILE, "a")
@@ -53,6 +72,13 @@ def save_data(data):
     except:
         print("Error saving data")
 
+# Convert the 0..1024 value to lux
+def sensor_val_to_lux(val):
+    res_volt = val * (Vcc / 1024) # Calc voltage over resistor (5V supply, 10-bit reading, so 5/2^10 = 5/1024 V per value)
+    return (500 / (10 * ((Vcc - res_volt) / res_volt)))
+    
+# Main loop
+timer = millis()
 while True:
     draw = False
     data_in = ser.readline()
@@ -61,64 +87,63 @@ while True:
     if len(data_in) > 1:
         data_in = data_in.decode()
 
-        if zero_received:
+        if data_in.rstrip() == "INIT_COMPLETE":
+            can_start = True
+            print("Arduino initialized, starting! Using pin%s A%s." % ("s" if len(SHOW_PINS) > 1 else "", ", A".join(str(pin) for pin in SHOW_PINS)))
+            continue
+
+        if can_start:
             save_data(data_in)
 
         unpack = data_in.rstrip().split(",")
 
         if len(unpack) == 3:
             try:
-                time = int(unpack[0])
+                timestamp = int(unpack[0])
                 pin = int(unpack[1])
                 res_val = int(unpack[2])
             except ValueError:
                 print(unpack)
                 pass
 
-            if pin == 0: # Workaround for only measuring 1 pin
+            if not pin in SHOW_PINS:
                 continue
             
-            if time == 0:
-                zero_received = True
-                save_data(data_in) # Else we ommit the 0-reading
-                print("Time = 0 received, starting!")
+            if can_start:
+                # Appending to the proper array
+                i = SHOW_PINS.index(pin)
+                
+                times[i].append(timestamp)
+                resistor_data[i].append(sensor_val_to_lux(res_val))
+                
+                if len(times[i]) > POP_CUTOFF:
+                    times[i].pop(0)
+                    resistor_data[i].pop(0)
 
-            if zero_received:
-                if len(times) > 0:
-                    if ((time - last_draw_time) >= REFRESH_MS) or (len(times) == 1): # Only draw every REFRESH_MS ms, or the first time
-                        last_draw_time = time
-                        draw = True
-                
-                times.append(time)
-
-                res_volt = res_val * (5 / 1024) # Calc voltage over resistor (5V supply, 10-bit reading, so 5/2^10 = 5/1024 V per value)
-                lux = 500 / (10 * ((5 - res_volt) / res_volt))
-                resistor_data.append(lux)
-                
-                count += 1
-                
-                if count > POP_CUTOFF:
-                    times.pop(0)
-                    resistor_data.pop(0)
+                lines[i].set_data(times[i], resistor_data[i])
     
     # Draw when it's time to draw!
-    if zero_received and draw:
-        line.set_data(times, resistor_data)
+    if can_start:
+        if (millis() - timer) >= REFRESH_MS:
+            timer = millis()
+            
+            # Somehow required?
+            ax1.relim()
+            ax1.autoscale_view(True, True, True)
 
-        # Somehow required?
-        ax1.relim()
-        ax1.autoscale_view(True, True, True)
-        ax1.set_title("Photoresistor Sensor Data (Current: %i lx)\n" % resistor_data[-1])
+            # Adjust scale of axes
+            if (Y_RANGE_LOW > -1) and (Y_RANGE_HIGH > -1):
+                ax1.set_ylim(Y_RANGE_LOW, Y_RANGE_HIGH)
+            else:
+                ax1.set_ylim(min(resistor_data), max(resistor_data))
 
-        if (Y_RANGE_LOW > 0) and (Y_RANGE_HIGH > 0):
-            ax1.set_ylim(Y_RANGE_LOW, Y_RANGE_HIGH)
-        else:
-            ax1.set_ylim(min(resistor_data), max(resistor_data))
+            # Speeds up drawing tremendously
+            ax1.draw_artist(ax1.patch)
 
-        # Speeds up drawing tremendously
-        ax1.draw_artist(ax1.patch)
-        ax1.draw_artist(line)
-        fig.canvas.draw_idle()
-        fig.canvas.flush_events()
+            for line in lines:
+                ax1.draw_artist(line)
+                
+            fig.canvas.draw_idle()
+            fig.canvas.flush_events()
 
 plt.show()

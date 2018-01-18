@@ -2,20 +2,22 @@ import matplotlib.pyplot as plt
 import serial
 import time
 
+# Get current timestamp in ms
 millis = lambda: int(round(time.time() * 1000.0))
 
 # User defined variables
-COM_PORT = "COM5"
+COM_PORT = "COM5" # Seen in the bottom-left of the Arduino IDE
 SAVE_FILE = "sensordata/data_%i.txt" % time.time()
 
-BAUD_RATE = 9600
-REFRESH_MS = 100
+BAUD_RATE = 9600 # Needs to coincide with Arduino code "Serial.begin(...)"
+REFRESH_MS = 100 # Refresh the graph every (x) ms
 POP_CUTOFF = 100 # The amount of data points to show on screen
 
-Vcc = 5.06
+Vcc = 5.06 # Input voltage of Arduino
 
-Y_RANGE_LOW = 0
-Y_RANGE_HIGH = 1000 # If both are -1, autofit is used
+# If both are -1, autofit is used
+Y_RANGE_LOW = -1
+Y_RANGE_HIGH = -1
 
 SHOW_PINS = [0, 1] # Only show from A0, A1, A..etc inputs
 
@@ -72,7 +74,7 @@ def save_data(data):
     except:
         print("Error saving data")
 
-# Convert the 0..1024 value to lux
+# Convert the 0...1024 value to lux
 def sensor_val_to_lux(val):
     res_volt = val * (Vcc / 1024) # Calc voltage over resistor (5V supply, 10-bit reading, so 5/2^10 = 5/1024 V per value)
     return (500 / (10 * ((Vcc - res_volt) / res_volt)))
@@ -89,7 +91,8 @@ while True:
 
         if data_in.rstrip() == "INIT_COMPLETE":
             can_start = True
-            print("Arduino initialized, starting! Using pin%s A%s." % ("s" if len(SHOW_PINS) > 1 else "", ", A".join(str(pin) for pin in SHOW_PINS)))
+            print("Arduino initialized, starting!")
+            print("Using pin%s A%s." % ("s" if len(SHOW_PINS) > 1 else "", ", A".join(str(pin) for pin in SHOW_PINS)))
             continue
 
         if can_start:
@@ -103,10 +106,10 @@ while True:
                 pin = int(unpack[1])
                 res_val = int(unpack[2])
             except ValueError:
-                print(unpack)
-                pass
+                print("Faulty serial communication: %s" % ",".join(unpack))
+                continue
 
-            if not pin in SHOW_PINS:
+            if not pin in SHOW_PINS: # Skip the pins we don't want/need to read
                 continue
             
             if can_start:
@@ -127,15 +130,16 @@ while True:
         if (millis() - timer) >= REFRESH_MS:
             timer = millis()
             
-            # Somehow required?
+            # Required to properly scale axes
             ax1.relim()
             ax1.autoscale_view(True, True, True)
 
-            # Adjust scale of axes
+            # Adjust scale of axes according to data
             if (Y_RANGE_LOW > -1) and (Y_RANGE_HIGH > -1):
                 ax1.set_ylim(Y_RANGE_LOW, Y_RANGE_HIGH)
             else:
-                ax1.set_ylim(min(resistor_data), max(resistor_data))
+                if len(min(resistor_data)) > 0:
+                    ax1.set_ylim(min([min(i) for i in resistor_data]), max([max(i) for i in resistor_data]))
 
             # Speeds up drawing tremendously
             ax1.draw_artist(ax1.patch)

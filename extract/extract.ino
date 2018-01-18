@@ -5,7 +5,7 @@ unsigned long t = 0;
 
 void setup()
 {
-  Serial.begin(9600);
+  Serial.begin(9600); //TODO: increase baud rate!
   Serial.println(" ");
 
   // Initialize pins

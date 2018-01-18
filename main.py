@@ -12,7 +12,8 @@ millis = lambda: int(round(time.time() * 1000.0))
 class FSR:
     def __init__(self):
         self.__start__ = time.time()
-        self.recordings = 1
+        self.recordings = 0
+        self.curr_rec_count = 0
         
 ####### User defined variables ##############################################################
         self.COM_PORT = "COM5" # Seen in the bottom-left of the Arduino IDE
@@ -22,7 +23,7 @@ class FSR:
         self.POP_CUTOFF = 100  # The amount of data points to show on screen
         self.INIT_TIMEOUT = 15 # The amount of seconds to wait for Arduino to initialize
 
-        self.Vcc = 5.06 # Input voltage of Arduino
+        self.Vcc = 5.06 # Input voltage of Arduino in V
 
         # If both are -1, autofit is used
         self.Y_RANGE_LOW = -1
@@ -32,20 +33,16 @@ class FSR:
 #############################################################################################
         
         # Misc. variable setup, don't touch
-        self.SAVE_FILE = "sensordata/data_%i_%i.txt" % (self.__start__, self.recordings)
         self.LOG_FILE = "logs/log_%i.txt" % self.__start__
-        self.cols = ["b-", "r-", "g-", "b-", "m-", "c-"]
         self.recording = False
-        self.can_start = False # To wait for Arduino to give the go-ahead
 
-        # Generate an empty data and log file
-        self.touch(self.SAVE_FILE)
-        self.touch(self.LOG_FILE)
+        self.touch(self.LOG_FILE) # Generate an empty log file
 
-        self.log("Starting... The GMT time is %s" % time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()))
+        self.log("Logging started @ %s (GMT)" % time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()))
         self.reset_vars()
         self.init_gui()
 
+    # Log to console + a log file
     def log(self, msg):
         timerunning = time.time() - self.__start__
         m, s = divmod(timerunning, 60)
@@ -56,7 +53,7 @@ class FSR:
         
         file = open(self.LOG_FILE, "a")
         file.write("%s - " % timerunning)
-        file.write(msg)
+        file.write(str(msg))
         file.write("\n")
         file.close()
     
@@ -84,37 +81,48 @@ class FSR:
         except Exception as e:
             self.log("Error saving data %s" % e)
 
-
     # Reset variables for plotting
     def reset_vars(self):
         self.times = []
         self.resistor_data = []
+        
         for pin in self.SHOW_PINS:
             self.times.append([])
             self.resistor_data.append([])
 
     def rec_stop(self):
         self.recording = False
-        self.log("Stopping recording")
-        self.recordings += 1
-        self.SAVE_FILE = "sensordata/data_%i_%i.txt" % (self.__start__, self.recordings)
+        self.log("Stopping recording, took %i measurements" % self.curr_rec_count)
 
         self.reset_vars()
 
-        self.ser.close() # Close the serial connection
+        try:
+            self.ser.close() # Close the serial connection
+        except AttributeError:
+            pass # Occurs when the serial connection was never established
+        except Exception as e:
+            self.log(e)
+            
         self.rec_stop_btn.configure(state="disabled")
         self.rec_start_btn.configure(state="normal")
 
     def rec_start(self):
         self.recording = True
+
         self.rec_start_btn.configure(state="disabled")
         self.rec_stop_btn.configure(state="normal")
 
         # Check if we can initiate the serial communication
         if self.init_serial():
+            self.recordings += 1
+            
+            self.SAVE_FILE = "sensordata/data_%i_%i.txt" % (self.__start__, self.recordings)
+            self.touch(self.SAVE_FILE) # Generate a new, empty data file
+
             self.record()
         else:
             self.recording = False
+            
             self.rec_start_btn.configure(state="normal")
             self.rec_stop_btn.configure(state="disabled")
 
@@ -122,12 +130,16 @@ class FSR:
         self.root.quit()
         self.root.destroy()
 
-        self.log("GUI destroyed")
+        self.log("GUI exit")
 
     def init_gui(self):
         # Initialize Tk, create layout elements
         self.root = Tk.Tk()
         self.root.wm_title("Sensor Data")
+
+        # Required to make the plot resize with the window
+        self.root.columnconfigure(1, weight=1)
+        self.root.rowconfigure(0, weight=1)
 
         self.menu_left = Tk.Frame(master=self.root)
         self.panel_right = Tk.Frame(master=self.root)
@@ -151,12 +163,14 @@ class FSR:
         self.init_mpl()
 
         # Right panel
-        # TODO: add labels/entries
+        # TODO: add labels/entries for different configuration options (see self. variables)
 
     def init_mpl(self):
         # Initialize matplotlib
         self.lines = []
-        self.fig, self.ax1 = plt.subplots()
+        self.cols = ["b-", "r-", "g-", "b-", "m-", "c-"]
+        self.fig = plt.figure()
+        self.ax1 = self.fig.add_subplot(111)
         self.ax1.set_autoscale_on(True)
         self.ax1.set_title("Photoresistor Sensor Data\n")
         self.ax1.set_ylabel("Sensor Value (lx)")
@@ -167,20 +181,25 @@ class FSR:
             tmp, = self.ax1.plot([], [], self.cols[pin])
             self.lines.append(tmp)
 
-        canvas = FigureCanvasTkAgg(self.fig, master=self.canvas_container)
-        canvas.show()
-        canvas.get_tk_widget().pack()
+        self.canvas = FigureCanvasTkAgg(self.fig, master=self.canvas_container)
+        self.canvas.show()
+        self.canvas.get_tk_widget().pack(fill=Tk.BOTH, expand=1)
 
-        self.canvas_container.grid(row=0, column=1, sticky="ne")
+        self.canvas_container.grid(row=0, column=1, sticky="nesw")
 
         # Instantiate Tk window for the first time
         self.update()
 
     def init_serial(self):
+        self.can_start = False # To wait for Arduino to give the go-ahead
+
         # Wait for serial connection
         timer = millis()
         while True:
             self.update()
+
+            if not self.recording:
+                return False
             
             try:
                 self.ser = serial.Serial(self.COM_PORT, self.BAUD_RATE)
@@ -194,6 +213,10 @@ class FSR:
         timer = millis()
         while True:
             self.update()
+
+            if not self.recording:
+                return False
+            
             data_in = self.ser.readline()
 
             if len(data_in) > 0:
@@ -201,7 +224,8 @@ class FSR:
 
                 if data_in == "INIT_COMPLETE":
                     self.can_start = True
-                    self.log("Arduino initialized, starting recording")
+                    self.log("Arduino initialized, starting recording #%i of this session" % self.recordings)
+                    self.log("File: %s" % self.SAVE_FILE)
                     self.log("Using pin%s A%s" % ("s" if len(self.SHOW_PINS) > 1 else "", ", A".join(str(pin) for pin in self.SHOW_PINS)))
 
                     return True
@@ -215,7 +239,7 @@ class FSR:
         if not self.can_start:
             return False
         
-        self.timer = millis()
+        self.draw_timer = millis()
         while self.recording:
             self.update()
 
@@ -243,11 +267,11 @@ class FSR:
 
                     if not pin in self.SHOW_PINS: # Skip the pins we don't want/need to read
                         continue
-                    else:
-                        self.save_data(data_in)
+
+                    self.curr_rec_count += 1
+                    self.save_data(data_in) # Save the data to file
                     
-                    # Appending to the proper array
-                    i = self.SHOW_PINS.index(pin)
+                    i = self.SHOW_PINS.index(pin) # Appending to the proper array
                     
                     self.times[i].append(timestamp)
                     self.resistor_data[i].append(self.sensor_val_to_lux(res_val))
@@ -263,8 +287,8 @@ class FSR:
 
     def draw(self):
         # Draw when it's time to draw!
-        if (millis() - self.timer) >= self.REFRESH_MS:
-            self.timer = millis()
+        if (millis() - self.draw_timer) >= self.REFRESH_MS:
+            self.draw_timer = millis()
             
             # Required to properly scale axes
             self.ax1.relim()
@@ -278,6 +302,7 @@ class FSR:
                     self.ax1.set_ylim(min([(min(i) - round(min(i) * 0.05)) for i in self.resistor_data]), \
                                       max([(max(i) + round(max(i) * 0.05)) for i in self.resistor_data])) # 5% margin above/below extreme values of lines
 
+            # Display readout in the title of the graph (temporary)
             if len(min(self.resistor_data)) > 0:
                 tmp = "Photoresistor Sensor Data\n%s" % (", ".join(("A%i: %0.2f lx" % (pin, self.resistor_data[i][-1])) for i, pin in enumerate(self.SHOW_PINS)))
                 self.ax1.set_title(tmp)

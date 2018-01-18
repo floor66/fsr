@@ -3,7 +3,7 @@ import serial, time
 
 # User defined variables
 COM_PORT = "COM5"
-SAVE_FILE = "sample.txt"
+SAVE_FILE = "sensordata/data_%i.txt" % time.time()
 
 BAUD_RATE = 9600
 REFRESH_MS = 100
@@ -23,7 +23,6 @@ last_draw_time = 0
 plt.ion()
 fig, ax1 = plt.subplots()
 ax1.set_autoscale_on(True)
-ax1.set_title("Photoresistor Sensor Data\n")
 ax1.set_ylabel("Sensor Value (lx)")
 ax1.set_xlabel("Time (ms)")
 line, = ax1.plot([], [], "r-")
@@ -69,11 +68,14 @@ while True:
         if len(unpack) == 3:
             try:
                 time = int(unpack[0])
+                pin = int(unpack[1])
                 res_val = int(unpack[2])
             except ValueError:
                 print(unpack)
                 pass
 
+                continue
+            
             if time == 0:
                 zero_received = True
                 save_data(data_in) # Else we ommit the 0-reading
@@ -104,7 +106,7 @@ while True:
         # Somehow required?
         ax1.relim()
         ax1.autoscale_view(True, True, True)
-
+        ax1.set_title("Photoresistor Sensor Data (Current: %i lx)\n" % resistor_data[-1])
         if (Y_RANGE_LOW > 0) and (Y_RANGE_HIGH > 0):
             ax1.set_ylim(Y_RANGE_LOW, Y_RANGE_HIGH)
         else:

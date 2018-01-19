@@ -21,7 +21,7 @@ class FSR:
         self.BAUD_RATE = 500000 # Needs to coincide with Arduino code "Serial.begin(...)"
         self.REFRESH_MS = 100 # Refresh the graph every (x) ms
         self.POP_CUTOFF = 100 # The amount of data points to show on screen
-        self.INIT_TIMEOUT = 15 # The amount of seconds to wait for Arduino to initialize
+        self.INIT_TIMEOUT = 5 # The amount of seconds to wait for Arduino to initialize
 
         self.Vcc = 5.06 # Input voltage of Arduino in V
 
@@ -33,6 +33,7 @@ class FSR:
 #############################################################################################
         
         # Misc. variable setup, don't touch
+        self.pulldown = 10000 # 10 kOhm pulldown resistance
         self.LOG_FILE = "logs/log_%i.txt" % self.__start__
         self.recording = False
 
@@ -60,7 +61,28 @@ class FSR:
     # Convert the 0...1024 value to lux
     def sensor_val_to_lux(self, val):
         res_volt = val * (self.Vcc / 1024) # Calc voltage over resistor (aprox. 5V supply, 10-bit reading, so 5/2^10 = 5/1024 V per value)
-        return (500 / (10 * ((self.Vcc - res_volt) / res_volt)))
+        return (500 / (10 * ((self.Vcc - res_volt) / res_volt))) / 100 # Divided by 100 to make it fit with N calc, to be removed
+
+    """ Convert the 0...1024 value to Newtons
+    # res_volt = Vcc * R / (R + Rfsr) where R = self.pulldown
+    
+      res_volt = (Vcc * R) / (R + FSR) # start
+      (R + FSR) * res_volt = Vcc * R # both side times (R + FSR)
+      (R + FSR) = (Vcc * R) / res_volt # both sides divided by res_volt
+      FSR = ((Vcc * R) / res_volt) - R # both sides subtracted by R
+    """
+    def sensor_val_to_N(self, val):
+        res_volt = val * (self.Vcc / 1024) # Calc voltage over resistor in V (aprox. 5V supply, 10-bit reading, so 5/2^10 = 5/1024 V per value)
+
+        if(res_volt > 0):
+            Rfsr = ((self.Vcc * self.pulldown) / res_volt) - self.pulldown
+
+            conductance = 1000000 / Rfsr
+            force = conductance / 80
+
+            return force
+        else:
+            return 0
 
     # Update the GUI
     def update(self):
@@ -175,8 +197,8 @@ class FSR:
         self.fig = plt.figure()
         self.ax1 = self.fig.add_subplot(111)
         self.ax1.set_autoscale_on(True)
-        self.ax1.set_title("Photoresistor Sensor Data\n")
-        self.ax1.set_ylabel("Sensor Value (lx)")
+        self.ax1.set_title("Sensor Data\n")
+        self.ax1.set_ylabel("Sensor Value (N)")
         self.ax1.set_xlabel("Time (ms)")
 
         # Instantiate a line in the graph for every pin we're reading
@@ -276,8 +298,9 @@ class FSR:
                     i = self.SHOW_PINS.index(pin) # Appending to the proper array
                     
                     self.times[i].append(timestamp)
-                    self.resistor_data[i].append(self.sensor_val_to_lux(res_val))
-                    #resistor_data[i].append(res_val * ((Vcc) / 1024)) # Displays voltage in V on y-axis
+                    #self.resistor_data[i].append(self.sensor_val_to_lux(res_val))
+                    self.resistor_data[i].append(self.sensor_val_to_N(res_val))
+                    #self.resistor_data[i].append(res_val * ((self.Vcc * 1000) / 1024)) # Displays voltage in mV on y-axis
                     
                     if len(self.times[i]) > self.POP_CUTOFF:
                         self.times[i].pop(0)
@@ -306,7 +329,7 @@ class FSR:
 
             # Display readout in the title of the graph (temporary)
             if len(min(self.resistor_data)) > 0:
-                tmp = "Photoresistor Sensor Data\n%s" % (", ".join(("A%i: %0.2f lx" % (pin, self.resistor_data[i][-1])) for i, pin in enumerate(self.SHOW_PINS)))
+                tmp = "Sensor Data\n%s" % (", ".join(("A%i: %0.2f N / %0.2f g" % (pin, self.resistor_data[i][-1], (self.resistor_data[i][-1] / 9.81 * 1000))) for i, pin in enumerate(self.SHOW_PINS)))
                 self.ax1.set_title(tmp)
             
             # Speeds up drawing tremendously

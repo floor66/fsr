@@ -18,32 +18,33 @@ class FSR:
 ####### User defined variables ##############################################################
         self.COM_PORT = "COM5" # Seen in the bottom-right of the Arduino IDE
 
-        self.BAUD_RATE = 500000 # Needs to coincide with Arduino code "Serial.begin(...)"
-        self.REFRESH_MS = 100 # Refresh the graph every (x) ms
-        self.POP_CUTOFF = 100 # The amount of data points to show on screen
+        self.BAUD_RATE = 500000 # Needs to coincide with Arduino code "Serial.begin(...)" (!)
         self.INIT_TIMEOUT = 5 # The amount of seconds to wait for Arduino to initialize
 
         self.Vcc = 5.06 # Input voltage of Arduino in V
 
-        # If both are -1, autofit is used
-        self.Y_RANGE_LOW = -1
-        self.Y_RANGE_HIGH = -1
+        # If both are None, autofit is used
+        self.Y_RANGE_LOW = None
+        self.Y_RANGE_HIGH = None
 
-        self.SHOW_PINS = [0, 1] # Only show from A0, A1, A..etc inputs
+        self.NUM_ANALOG = 6 # 6 max possible analog pins
+        
+        self.pulldown = 10000 # 10 kOhm pulldown resistance
 #############################################################################################
         
         # Misc. variable setup, don't touch
-        self.pulldown = 10000 # 10 kOhm pulldown resistance
         self.LOG_FILE = "logs/log_%i.txt" % self.__start__
         self.recording = False
 
+        self.SHOW_PINS = [] # Linked to checkbuttons
+        self.REC_PINS = [0, 1] #TEMPORARY! MAKE CHECKBOXES FOR
         self.touch(self.LOG_FILE) # Generate an empty log file
 
         self.log("Logging started @ %s (GMT)" % time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()))
-        self.reset_vars()
         self.init_gui()
+        self.reset_vars()
 
-    # Log to console + a log file
+    # Log to console and to a log file
     def log(self, msg):
         timerunning = time.time() - self.__start__
         m, s = divmod(timerunning, 60)
@@ -66,7 +67,7 @@ class FSR:
     """ Convert the 0...1024 value to Newtons
     # res_volt = Vcc * R / (R + Rfsr) where R = self.pulldown
     
-      res_volt = (Vcc * R) / (R + FSR) # start
+      res_volt = (Vcc * R) / (R + FSR) # start formula
       (R + FSR) * res_volt = Vcc * R # both side times (R + FSR)
       (R + FSR) = (Vcc * R) / res_volt # both sides divided by res_volt
       FSR = ((Vcc * R) / res_volt) - R # both sides subtracted by R
@@ -108,9 +109,11 @@ class FSR:
         self.times = []
         self.resistor_data = []
         
-        for pin in self.SHOW_PINS:
+        for i in range(0, self.NUM_ANALOG):
             self.times.append([])
             self.resistor_data.append([])
+            
+            self.lines[i].set_data([], [])
 
     def rec_stop(self):
         self.recording = False
@@ -142,7 +145,7 @@ class FSR:
 
             self.log("Arduino initialized, starting recording #%i of this session" % self.recordings)
             self.log("File: %s" % self.SAVE_FILE)
-            self.log("Using pin%s A%s" % ("s" if len(self.SHOW_PINS) > 1 else "", ", A".join(str(pin) for pin in self.SHOW_PINS)))
+            self.log("Recording from pin%s A%s" % ("s" if len(self.REC_PINS) > 1 else "", ", A".join(str(pin) for pin in self.REC_PINS)))
 
             self.record()
         else:
@@ -157,38 +160,102 @@ class FSR:
 
         self.log("GUI exit")
 
+    def toggle_sensor_selection(self):
+        for i in range(0, self.NUM_ANALOG):
+            changed = False
+            state = self.sensor_select_vars[i].get()
+
+            if state == 1:
+                if not i in self.SHOW_PINS:
+                    self.SHOW_PINS.append(i)
+                    changed = True
+            elif state == 0:
+                if i in self.SHOW_PINS:
+                    self.SHOW_PINS.pop(self.SHOW_PINS.index(i))
+                    changed = True
+
+            if changed:
+                self.log("Reset data for Pin A%i" % i)
+                self.times[i] = []
+                self.resistor_data[i] = []
+                self.lines[i].set_data([], [])
+
     def init_gui(self):
         # Initialize Tk, create layout elements
         self.root = Tk.Tk()
-        self.root.wm_title("Sensor Data")
+        self.root.wm_title("Sensor Data (%i)" % self.__start__)
 
         # Required to make the plot resize with the window
         self.root.columnconfigure(1, weight=1)
         self.root.rowconfigure(0, weight=1)
 
-        self.menu_left = Tk.Frame(master=self.root)
+        # So that we lose Entry focus on clicking anywhere
+        self.root.bind_all("<1>", lambda event:event.widget.focus_set())
+
+        self.panel_left = Tk.Frame(master=self.root)
         self.panel_right = Tk.Frame(master=self.root)
         self.canvas_container = Tk.Frame(master=self.root)
 
-        # Left menu
-        self.rec_start_btn = Tk.Button(master=self.menu_left, text="Start Recording", command=self.rec_start)
-        self.rec_stop_btn = Tk.Button(master=self.menu_left, text="Stop Recording", command=self.rec_stop)
+        # Left panel
 
+        # Start/stop buttons
+        self.rec_start_btn = Tk.Button(master=self.panel_left, text="Start Recording", command=self.rec_start)
+        self.rec_stop_btn = Tk.Button(master=self.panel_left, text="Stop Recording", command=self.rec_stop)
         self.rec_stop_btn.configure(state="disabled")
 
-        self.rec_start_btn.grid(row=0, column=0, sticky="n")
-        self.rec_stop_btn.grid(row=1, column=0, sticky="n")
-        
-        self.menu_left.grid(row=0, column=0, sticky="nw", padx=10, pady=10)
+        # Graph refresh scale
+        self.REFRESH_MS = Tk.IntVar()
+        self.REFRESH_MS.set(100)
+            
+        self.refresh_entry = Tk.Scale(master=self.panel_left, length=150, from_=1, to=1000, resolution=25, label="Graph refreshrate (ms):", orient=Tk.HORIZONTAL, variable=self.REFRESH_MS)
 
+        # The amount of data points to show on screen
+        self.POP_CUTOFF = Tk.IntVar()
+        self.POP_CUTOFF.set(100)
+
+        self.cutoff_entry = Tk.Scale(master=self.panel_left, length=150, from_=25, to=1000, resolution=25, label="Datapoints to show:", orient=Tk.HORIZONTAL, variable=self.POP_CUTOFF)
+
+        # Setup the grid within panel_left
+        self.rec_start_btn.grid(row=1, column=0, sticky="n")
+        self.rec_stop_btn.grid(row=2, column=0, sticky="n")
+        self.refresh_entry.grid(row=3, column=0, pady=10, sticky="n")
+        self.cutoff_entry.grid(row=4, column=0, sticky="n")
+        
+        self.panel_left.grid(row=0, column=0, sticky="nw", padx=10, pady=10)
+
+        # Quit button
         self.quit_btn = Tk.Button(master=self.root, text="Quit", command=self.quit_gui)
         self.quit_btn.grid(row=0, column=0, sticky="s", pady=5)
 
-        # Init matplotlib graph
+        # Init matplotlib graph at this point
         self.init_mpl()
 
         # Right panel
-        # TODO: add labels/entries for different configuration options (see self. variables)
+
+        # Display selection frame
+        self.sensor_select_frame = Tk.LabelFrame(master=self.panel_right, padx=5, pady=5, text="Display in graph:")
+        
+        self.sensor_select_boxes = []
+        self.sensor_select_vars = [Tk.IntVar() for i in range(0, self.NUM_ANALOG)]
+        for i in range(0, self.NUM_ANALOG):
+            self.sensor_select_boxes.append(Tk.Checkbutton(master=self.sensor_select_frame, text="Pin A%i" % i, \
+                                                           command=self.toggle_sensor_selection, variable=self.sensor_select_vars[i]))
+            self.sensor_select_boxes[i].pack(side=Tk.TOP, anchor="w")
+
+        self.sensor_select_frame.pack(padx=15, pady=15, anchor="n")
+
+        # Sensor readouts frame
+        self.sensor_readout_frame = Tk.LabelFrame(master=self.panel_right, padx=5, pady=5, text="Sensor readouts:")
+
+        # Create 1 label per pin
+        self.sensor_readouts = [Tk.Label(master=self.sensor_readout_frame, text=("Pin A%i: 0.00 N" % i)) for i in range(0, self.NUM_ANALOG)]
+        for i in range(0, self.NUM_ANALOG):
+            self.sensor_readouts[i].pack(side=Tk.TOP, anchor="w")
+
+        self.sensor_readout_frame.pack(anchor="n")
+
+        # Apply grid to right panel
+        self.panel_right.grid(row=0, column=2, rowspan=3, sticky="n")
 
     def init_mpl(self):
         # Initialize matplotlib
@@ -201,9 +268,9 @@ class FSR:
         self.ax1.set_ylabel("Sensor Value (N)")
         self.ax1.set_xlabel("Time (ms)")
 
-        # Instantiate a line in the graph for every pin we're reading
-        for pin in self.SHOW_PINS:
-            tmp, = self.ax1.plot([], [], self.cols[pin])
+        # Instantiate a line in the graph for every pin we could potentially read
+        for i in range(0, self.NUM_ANALOG):
+            tmp, = self.ax1.plot([], [], self.cols[i])
             self.lines.append(tmp)
 
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.canvas_container)
@@ -266,7 +333,7 @@ class FSR:
         self.draw_timer = millis()
         while self.recording:
             self.update()
-
+            
             try:
                 data_in = self.ser.readline()
             except serial.serialutil.SerialException as e:
@@ -289,30 +356,32 @@ class FSR:
                         self.log("Faulty serial communication: %s" % ",".join(unpack))
                         continue
 
+                    if pin in self.REC_PINS:
+                        self.curr_rec_count += 1
+                        self.save_data(data_in) # Save the data to file
+
+                    # Display readout in the proper label
+                    self.sensor_readouts[pin].config(text="Pin A%i: %.02f N" % (pin, self.sensor_val_to_N(res_val)))
+                    
                     if not pin in self.SHOW_PINS: # Skip the pins we don't want/need to read
                         continue
+                   
+                    self.times[pin].append(timestamp)
+                    #self.resistor_data[pin].append(self.sensor_val_to_lux(res_val))
+                    self.resistor_data[pin].append(self.sensor_val_to_N(res_val))
+                    #self.resistor_data[pin].append(res_val * ((self.Vcc * 1000) / 1024)) # Displays voltage in mV on y-axis
+                    
+                    if len(self.times[pin]) > self.POP_CUTOFF.get():
+                        self.times[pin] = self.times[pin][-self.POP_CUTOFF.get():]
+                        self.resistor_data[pin] = self.resistor_data[pin][-self.POP_CUTOFF.get():]
 
-                    self.curr_rec_count += 1
-                    self.save_data(data_in) # Save the data to file
-                    
-                    i = self.SHOW_PINS.index(pin) # Appending to the proper array
-                    
-                    self.times[i].append(timestamp)
-                    #self.resistor_data[i].append(self.sensor_val_to_lux(res_val))
-                    self.resistor_data[i].append(self.sensor_val_to_N(res_val))
-                    #self.resistor_data[i].append(res_val * ((self.Vcc * 1000) / 1024)) # Displays voltage in mV on y-axis
-                    
-                    if len(self.times[i]) > self.POP_CUTOFF:
-                        self.times[i].pop(0)
-                        self.resistor_data[i].pop(0)
-
-                    self.lines[i].set_data(self.times[i], self.resistor_data[i])
+                    self.lines[pin].set_data(self.times[pin], self.resistor_data[pin])
 
             self.draw()
 
     def draw(self):
         # Draw when it's time to draw!
-        if (millis() - self.draw_timer) >= self.REFRESH_MS:
+        if (millis() - self.draw_timer) >= self.REFRESH_MS.get():
             self.draw_timer = millis()
             
             # Required to properly scale axes
@@ -320,30 +389,28 @@ class FSR:
             self.ax1.autoscale_view(True, True, True)
 
             # Adjust scale of axes according to data
-            if (self.Y_RANGE_LOW > -1) and (self.Y_RANGE_HIGH > -1):
+            if (self.Y_RANGE_LOW is not None) and (self.Y_RANGE_HIGH is not None):
                 self.ax1.set_ylim(self.Y_RANGE_LOW, self.Y_RANGE_HIGH)
             else:
                 if len(min(self.resistor_data)) > 0:
                     self.ax1.set_ylim(min([(min(i) - round(min(i) * 0.05)) for i in self.resistor_data]), \
                                       max([(max(i) + round(max(i) * 0.05)) for i in self.resistor_data])) # 5% margin above/below extreme values of lines
 
-            # Display readout in the title of the graph (temporary)
-            if len(min(self.resistor_data)) > 0:
-                tmp = "Sensor Data\n%s" % (", ".join(("A%i: %0.2f N / %0.2f g" % (pin, self.resistor_data[i][-1], (self.resistor_data[i][-1] / 9.81 * 1000))) for i, pin in enumerate(self.SHOW_PINS)))
-                self.ax1.set_title(tmp)
-            
             # Speeds up drawing tremendously
             self.ax1.draw_artist(self.ax1.patch)
 
-            for line in self.lines:
-                self.ax1.draw_artist(line)
+            for i in range(0, self.NUM_ANALOG):
+                if i in self.SHOW_PINS:
+                    self.ax1.draw_artist(self.lines[i])
                 
             self.fig.canvas.draw_idle()
             self.fig.canvas.flush_events()
 
-try:
-    fsr = FSR()
-except (KeyboardInterrupt, SystemExit):
-    raise
-except Exception as e:
-    fsr.log(e)
+if __name__ == "__main__":
+    try:
+        fsr = FSR()
+    except (KeyboardInterrupt, SystemExit): # Doesn't function yet
+        fsr.quit_gui()
+        raise
+    except Exception as e:
+        fsr.log(e)

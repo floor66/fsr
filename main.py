@@ -16,11 +16,11 @@ class FSR:
         self.curr_rec_count = 0
         
 ####### User defined variables ##############################################################
-        self.COM_PORT = "COM5" # Seen in the bottom-left of the Arduino IDE
+        self.COM_PORT = "COM5" # Seen in the bottom-right of the Arduino IDE
 
-        self.BAUD_RATE = 9600  # Needs to coincide with Arduino code "Serial.begin(...)"
-        self.REFRESH_MS = 100  # Refresh the graph every (x) ms
-        self.POP_CUTOFF = 100  # The amount of data points to show on screen
+        self.BAUD_RATE = 500000 # Needs to coincide with Arduino code "Serial.begin(...)"
+        self.REFRESH_MS = 100 # Refresh the graph every (x) ms
+        self.POP_CUTOFF = 100 # The amount of data points to show on screen
         self.INIT_TIMEOUT = 15 # The amount of seconds to wait for Arduino to initialize
 
         self.Vcc = 5.06 # Input voltage of Arduino in V
@@ -115,9 +115,12 @@ class FSR:
         # Check if we can initiate the serial communication
         if self.init_serial():
             self.recordings += 1
-            
             self.SAVE_FILE = "sensordata/data_%i_%i.txt" % (self.__start__, self.recordings)
             self.touch(self.SAVE_FILE) # Generate a new, empty data file
+
+            self.log("Arduino initialized, starting recording #%i of this session" % self.recordings)
+            self.log("File: %s" % self.SAVE_FILE)
+            self.log("Using pin%s A%s" % ("s" if len(self.SHOW_PINS) > 1 else "", ", A".join(str(pin) for pin in self.SHOW_PINS)))
 
             self.record()
         else:
@@ -220,15 +223,14 @@ class FSR:
             data_in = self.ser.readline()
 
             if len(data_in) > 0:
-                data_in = data_in.decode().rstrip()
+                try:
+                    data_in = data_in.decode().rstrip()
 
-                if data_in == "INIT_COMPLETE":
-                    self.can_start = True
-                    self.log("Arduino initialized, starting recording #%i of this session" % self.recordings)
-                    self.log("File: %s" % self.SAVE_FILE)
-                    self.log("Using pin%s A%s" % ("s" if len(self.SHOW_PINS) > 1 else "", ", A".join(str(pin) for pin in self.SHOW_PINS)))
-
-                    return True
+                    if data_in == "INIT_COMPLETE":
+                        self.can_start = True
+                        return True
+                except Exception as e:
+                    self.log(e)
 
             if (millis() - timer) >= (self.INIT_TIMEOUT * 1000):
                 self.log("Arduino failed to initialize after %i sec" % self.INIT_TIMEOUT)

@@ -115,6 +115,10 @@ class FSR:
             
             self.lines[i].set_data([], [])
 
+    # At-a-glance status label
+    def status(self, txt):
+        self.status_lbl.configure(text="%s" % txt)
+
     def rec_stop(self):
         self.recording = False
         self.log("Stopping recording, took %i measurements" % self.curr_rec_count)
@@ -130,22 +134,27 @@ class FSR:
             
         self.rec_stop_btn.configure(state="disabled")
         self.rec_start_btn.configure(state="normal")
+        self.status("Recording stopped")
 
     def rec_start(self):
         self.recording = True
+        self.status("Initiating connection")
 
         self.rec_start_btn.configure(state="disabled")
         self.rec_stop_btn.configure(state="normal")
 
         # Check if we can initiate the serial communication
         if self.init_serial():
+            self.status("Connection initiated")
             self.recordings += 1
             self.SAVE_FILE = "sensordata/data_%i_%i.txt" % (self.__start__, self.recordings)
             self.touch(self.SAVE_FILE) # Generate a new, empty data file
 
             self.log("Arduino initialized, starting recording #%i of this session" % self.recordings)
             self.log("File: %s" % self.SAVE_FILE)
+            self.save_data("Pin(s) recorded: %s\n" % ",".join(str(pin) for pin in self.REC_PINS))
             self.log("Recording from pin%s A%s" % ("s" if len(self.REC_PINS) > 1 else "", ", A".join(str(pin) for pin in self.REC_PINS)))
+            self.status("Recording active...")
 
             self.record()
         else:
@@ -198,29 +207,39 @@ class FSR:
 
         # Left panel
 
-        # Start/stop buttons
-        self.rec_start_btn = Tk.Button(master=self.panel_left, text="Start Recording", command=self.rec_start)
-        self.rec_stop_btn = Tk.Button(master=self.panel_left, text="Stop Recording", command=self.rec_stop)
+        # Status label+frame
+        self.status_frame = Tk.LabelFrame(master=self.panel_left, text="Status")
+        self.status_lbl = Tk.Label(master=self.status_frame)
+        self.status_lbl.pack()
+        self.status("Disconnected")
+        
+        # Start/stop buttons+frame
+        self.controls_frame = Tk.LabelFrame(master=self.panel_left, text="Controls", pady=10)
+        self.rec_start_btn = Tk.Button(master=self.controls_frame, text="Start Recording", command=self.rec_start)
+        self.rec_stop_btn = Tk.Button(master=self.controls_frame, text="Stop Recording", command=self.rec_stop)
         self.rec_stop_btn.configure(state="disabled")
 
         # Graph refresh scale
         self.REFRESH_MS = Tk.IntVar()
         self.REFRESH_MS.set(100)
             
-        self.refresh_entry = Tk.Scale(master=self.panel_left, length=150, from_=1, to=1000, resolution=25, label="Graph refreshrate (ms):", orient=Tk.HORIZONTAL, variable=self.REFRESH_MS)
+        self.refresh_entry = Tk.Scale(master=self.controls_frame, length=150, from_=1, to=1000, resolution=25, label="Graph refreshrate (ms)", orient=Tk.HORIZONTAL, variable=self.REFRESH_MS)
 
         # The amount of data points to show on screen
         self.POP_CUTOFF = Tk.IntVar()
         self.POP_CUTOFF.set(100)
 
-        self.cutoff_entry = Tk.Scale(master=self.panel_left, length=150, from_=25, to=1000, resolution=25, label="Datapoints to show:", orient=Tk.HORIZONTAL, variable=self.POP_CUTOFF)
+        self.cutoff_entry = Tk.Scale(master=self.controls_frame, length=150, from_=25, to=1000, resolution=25, label="Datapoints to show", orient=Tk.HORIZONTAL, variable=self.POP_CUTOFF)
 
         # Setup the grid within panel_left
-        self.rec_start_btn.grid(row=1, column=0, sticky="n")
-        self.rec_stop_btn.grid(row=2, column=0, sticky="n")
-        self.refresh_entry.grid(row=3, column=0, pady=10, sticky="n")
-        self.cutoff_entry.grid(row=4, column=0, sticky="n")
+        self.rec_start_btn.pack()
+        self.rec_stop_btn.pack()
+        self.refresh_entry.pack(pady=10)
+        self.cutoff_entry.pack()
         
+        self.status_frame.grid(row=0, column=0, sticky="nsew")
+        self.controls_frame.grid(row=1, column=0, sticky="n", pady=10)
+
         self.panel_left.grid(row=0, column=0, sticky="nw", padx=10, pady=10)
 
         # Quit button
@@ -233,7 +252,7 @@ class FSR:
         # Right panel
 
         # Display selection frame
-        self.sensor_select_frame = Tk.LabelFrame(master=self.panel_right, padx=5, pady=5, text="Display in graph:")
+        self.sensor_select_frame = Tk.LabelFrame(master=self.panel_right, padx=5, text="Display in graph")
         
         self.sensor_select_boxes = []
         self.sensor_select_vars = [Tk.IntVar() for i in range(0, self.NUM_ANALOG)]
@@ -242,20 +261,20 @@ class FSR:
                                                            command=self.toggle_sensor_selection, variable=self.sensor_select_vars[i]))
             self.sensor_select_boxes[i].pack(side=Tk.TOP, anchor="w")
 
-        self.sensor_select_frame.pack(padx=15, pady=15, anchor="n")
+        self.sensor_select_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
 
         # Sensor readouts frame
-        self.sensor_readout_frame = Tk.LabelFrame(master=self.panel_right, padx=5, pady=5, text="Sensor readouts:")
+        self.sensor_readout_frame = Tk.LabelFrame(master=self.panel_right, padx=5, pady=5, text="Live readouts")
 
         # Create 1 label per pin
-        self.sensor_readouts = [Tk.Label(master=self.sensor_readout_frame, text=("Pin A%i: 0.00 N" % i)) for i in range(0, self.NUM_ANALOG)]
+        self.sensor_readouts = [Tk.Label(master=self.sensor_readout_frame, text=("Pin A%i: 0 mV / 0.00 N" % i)) for i in range(0, self.NUM_ANALOG)]
         for i in range(0, self.NUM_ANALOG):
             self.sensor_readouts[i].pack(side=Tk.TOP, anchor="w")
 
-        self.sensor_readout_frame.pack(anchor="n")
+        self.sensor_readout_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
 
         # Apply grid to right panel
-        self.panel_right.grid(row=0, column=2, rowspan=3, sticky="n")
+        self.panel_right.grid(row=0, column=2, sticky="n")
 
     def init_mpl(self):
         # Initialize matplotlib
@@ -361,7 +380,7 @@ class FSR:
                         self.save_data(data_in) # Save the data to file
 
                     # Display readout in the proper label
-                    self.sensor_readouts[pin].config(text="Pin A%i: %.02f N" % (pin, self.sensor_val_to_N(res_val)))
+                    self.sensor_readouts[pin].config(text="Pin A%i: %i mV / %.02f N" % (pin, res_val * ((self.Vcc * 1000) / 1024), self.sensor_val_to_N(res_val)))
                     
                     if not pin in self.SHOW_PINS: # Skip the pins we don't want/need to read
                         continue
@@ -392,9 +411,26 @@ class FSR:
             if (self.Y_RANGE_LOW is not None) and (self.Y_RANGE_HIGH is not None):
                 self.ax1.set_ylim(self.Y_RANGE_LOW, self.Y_RANGE_HIGH)
             else:
-                if len(min(self.resistor_data)) > 0:
-                    self.ax1.set_ylim(min([(min(i) - round(min(i) * 0.05)) for i in self.resistor_data]), \
-                                      max([(max(i) + round(max(i) * 0.05)) for i in self.resistor_data])) # 5% margin above/below extreme values of lines
+                low = None
+                high = None
+                
+                for i in range(0, self.NUM_ANALOG):
+                    try:
+                        min_ = min(self.resistor_data[i])
+                        max_ = max(self.resistor_data[i])
+
+                        if (low is None) or (min_ < low):
+                            low = min_
+
+                        if (high is None) or (max_ > high):
+                            high = max_
+                    except ValueError:
+                        pass
+                    except Exception:
+                        raise
+                    
+                if (low is not None) and (high is not None):
+                    self.ax1.set_ylim(low - ((low if low > 0 else 1) * 0.05), high + ((high if high > 0 else 1) * 0.05)) # 5% margin above/below extreme values of lines
 
             # Speeds up drawing tremendously
             self.ax1.draw_artist(self.ax1.patch)

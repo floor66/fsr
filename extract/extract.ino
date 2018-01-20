@@ -1,3 +1,12 @@
+/*
+    extract.ino
+    Created by Floris P.J. den Hartog, 2018
+
+    Gathering of "raw" Force Sensitive Resistor data from analog input
+    Configurable measurement frequency
+    Note: higher frequencies (>200) might not play nice with python
+*/
+
 int sensorPins[] = {0, 1, 2, 3, 4, 5};
 unsigned long timers[] = {0, 0, 0, 0, 0, 0};
 int sensorVal = 0;

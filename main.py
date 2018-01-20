@@ -1,3 +1,11 @@
+"""
+    main.py
+    Created by Floris P.J. den Hartog, 2018
+
+    Main file for the GUI / processing of Force Sensitive Resistor data
+    Used in conjunction with Arduino for analog-digital conversion
+"""
+
 import matplotlib
 matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -152,7 +160,8 @@ class FSR:
 
             self.log("Arduino initialized, starting recording #%i of this session" % self.recordings)
             self.log("File: %s" % self.SAVE_FILE)
-            self.save_data("Pin(s) recorded: %s\n" % ",".join(str(pin) for pin in self.REC_PINS))
+            self.save_data("; Pin(s) recorded: %s @ 50 Hz\n" % ",".join(str(pin) for pin in self.REC_PINS))
+            self.save_data("; time (ms), pin (A0-5), readout (0-1024)\n")
             self.log("Recording from pin%s A%s" % ("s" if len(self.REC_PINS) > 1 else "", ", A".join(str(pin) for pin in self.REC_PINS)))
             self.status("Recording active...")
 

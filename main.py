@@ -72,13 +72,25 @@ class FSR:
         res_volt = val * (self.Vcc / 1024) # Calc voltage over resistor (aprox. 5V supply, 10-bit reading, so 5/2^10 = 5/1024 V per value)
         return (500 / (10 * ((self.Vcc - res_volt) / res_volt))) / 100 # Divided by 100 to make it fit with N calc, to be removed
 
-    """ Convert the 0...1024 value to Newtons
-    # res_volt = Vcc * R / (R + Rfsr) where R = self.pulldown
-    
-      res_volt = (Vcc * R) / (R + FSR) # start formula
-      (R + FSR) * res_volt = Vcc * R # both side times (R + FSR)
-      (R + FSR) = (Vcc * R) / res_volt # both sides divided by res_volt
-      FSR = ((Vcc * R) / res_volt) - R # both sides subtracted by R
+    """
+      Convert the 0...1024 value to Newtons
+      
+      We start with:
+       res_volt = sensor_readout * (Vcc / 2^10)
+      Where sensor_readout comes directly from Arduino
+      Vcc = power supply voltage (e.g. with USB, it's aprox. 5.06V)
+      And 2^10 (=1024) because arduino has 10-bit readout capability
+
+      Then we want to calculate the resistance over the FSR:
+       res_volt = Vcc * Rp / (Rp + Rfsr)
+      We know res_volt, Vcc, Rp (= pulldown resistance)
+      We want to know Rfsr
+
+      Some algebra:
+       res_volt = (Vcc * Rp) / (Rp + Rfsr) | start out with this
+       (Rp + Rfsr) * res_volt = Vcc * Rp   | both side times (R + FSR)
+       (Rp + Rfsr) = (Vcc * Rp) / res_volt | both sides divided by res_volt
+       Rfsr = ((Vcc * Rp) / res_volt) - Rp | both sides subtracted by R
     """
     def sensor_val_to_N(self, val):
         res_volt = val * (self.Vcc / 1024) # Calc voltage over resistor in V (aprox. 5V supply, 10-bit reading, so 5/2^10 = 5/1024 V per value)
@@ -86,7 +98,10 @@ class FSR:
         if(res_volt > 0):
             Rfsr = ((self.Vcc * self.pulldown) / res_volt) - self.pulldown
 
+            # Conductance = 1 / Resistance
             conductance = 1000000 / Rfsr
+
+            # Why /80?
             force = conductance / 80
 
             return force
@@ -161,6 +176,7 @@ class FSR:
             self.log("Arduino initialized, starting recording #%i of this session" % self.recordings)
             self.log("File: %s" % self.SAVE_FILE)
             self.save_data("; Pin(s) recorded: %s @ 50 Hz\n" % ",".join(str(pin) for pin in self.REC_PINS))
+            self.save_data("; Vcc = %.02f, pulldown = %i Ohm" % (self.vcc, self.pulldown))
             self.save_data("; time (ms), pin (A0-5), readout (0-1024)\n")
             self.log("Recording from pin%s A%s" % ("s" if len(self.REC_PINS) > 1 else "", ", A".join(str(pin) for pin in self.REC_PINS)))
             self.status("Recording active...")

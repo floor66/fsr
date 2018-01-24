@@ -105,20 +105,23 @@ class FSR:
         # return ((self.Vcc * self.pulldown) / volt) - self.pulldown (old formula, works the same but less evidence)
         return self.pulldown * ((self.Vcc / volt) - 1) if volt > 0 else 0
 
-    # Dodgy
-    def sensor_val_to_N(self, val):
-        res_volt = val * (self.Vcc / 1024) # Calc voltage over resistor in V (aprox. 5V supply, 10-bit reading, so 5/2^10 = 5/1024 V per value)
-
-        if(res_volt > 0):
-            Rfsr = ((self.Vcc * self.pulldown) / res_volt) - self.pulldown
-
-            # Conductance = 1 / Resistance
-            conductance = 1000000 / Rfsr
-
-            # Why /80?
-            force = conductance / 80
+    def val_to_N(self, val):
+        if(val > 0):
+            res_volt = self.val_to_volt(val)
+            Rfsr = self.volt_to_Rfsr(res_volt)
+            cond = 1 / Rfsr # Conductance = 1 / Resistance and vice-versa
+            
+            # y = 96892x-1,292
+            force = 96892 * (Rfsr**-1.292)
+            # Not really correct, reference website rounded too much
 
             return force
+
+            """
+            #print("Vfsr = %.10f V" % res_volt)
+            #print("Rfsr = %.10f Ohm" % Rfsr)
+            #print("Cfsr = %.10f S" % cond)
+            """
         else:
             return 0
 
@@ -259,8 +262,9 @@ class FSR:
             i = self.y_unit_opts.index(val)
         except ValueError:
             val = self.y_unit_opts[0]
-            
+
         self.ax1.set_ylabel(val)
+        self.reset_vars()
                 
     def init_gui(self):
         # Initialize Tk, create layout elements
@@ -499,7 +503,7 @@ class FSR:
                         self.save_data(data_in) # Save the data to file
 
                     # Display readout in the proper label
-                    self.sensor_readouts[pin].config(text="Pin A%i: %i mV / %.02f N" % (pin, res_val * ((self.Vcc * 1000) / 1024), self.sensor_val_to_N(res_val)))
+                    self.sensor_readouts[pin].config(text="Pin A%i: %i mV / %.02f N" % (pin, self.val_to_volt(res_val), self.val_to_N(res_val)))
                     
                     if not pin in self.SHOW_PINS: # Skip the pins we don't want/need to read
                         continue

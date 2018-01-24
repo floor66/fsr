@@ -67,6 +67,7 @@ class calcModel:
             
             # y = 96892x-1,292
             force = 96892 * (Rfsr**-1.292)
+            # Not really correct, reference website rounded too much
 
             return force
 
@@ -116,6 +117,7 @@ class calcModel:
         ax1.plot(x, y)
 
 m = calcModel(5.06, 10000)
+m.plot(m.volts, m.resists, "Voltage (V)", "Resistance (Ohm)")
 m.plot(m.volts, m.conds, "Voltage (V)", "Conductance (S)", ylim=(0, 2*10**-3))
 m.plot([v*1000 for v in m.volts], m.forces, "Voltage (mV)", "Force (N)", ylim=(0, 100))
 print(m.forces[-10:])

@@ -32,7 +32,7 @@ void setup()
 
 void loop()
 {
-  // Key: time (ms), pin number (A0-5), resistor value (0-1024)
+  // Key: time (ms), pin number (A0-5), resistor value (0-1023)
 
   for(int i = 0; i < sensorCount; i++) {
     curr_t = millis();

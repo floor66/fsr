@@ -44,6 +44,11 @@ class FSR:
         self.LOG_FILE = "logs/log_%i.txt" % self.__start__
         self.recording = False
 
+        self.OPT_RAW = 0
+        self.OPT_VOLTAGE = 1
+        self.OPT_RESISTANCE = 2
+        self.OPT_CONDUCTANCE = 3
+
         self.SHOW_PINS = [] # Linked to checkbuttons
         self.REC_PINS = [] #TEMPORARY! MAKE CHECKBOXES FOR
         self.touch(self.LOG_FILE) # Generate an empty log file
@@ -74,31 +79,33 @@ class FSR:
     def status(self, txt):
         self.status_lbl.configure(text="%s" % txt)
 
-    # Convert the 0...1024 value to lux
-    def sensor_val_to_lux(self, val):
-        res_volt = val * (self.Vcc / 1024) # Calc voltage over resistor (aprox. 5V supply, 10-bit reading, so 5/2^10 = 5/1024 V per value)
-        return (500 / (10 * ((self.Vcc - res_volt) / res_volt))) / 100 # Divided by 100 to make it fit with N calc, to be removed
+    def val_to_volt(self, val):
+        return val * (self.Vcc / (2**10 - 1)) if val > 0 else 0
 
     """
-      Convert the 0...1024 value to Newtons
+    FSR spec sheet says:
+      VOUT = (V+) / [1 + RFSR/RM]
       
-      We start with:
-       res_volt = sensor_readout * (Vcc / 2^10)
-      Where sensor_readout comes directly from Arduino
-      Vcc = power supply voltage (e.g. with USB, it's aprox. 5.06V)
-      And 2^10 (=1024) because arduino has 10-bit readout capability
+    Where:
+      VOUT is measured by Arduino on the analog pin
+        the pin gives a value of 0-1023, corresponding to (Vcc / 2^10) different "steps" of voltage
+      V+ = Vcc (power source to Arduino)
+      RFSR = the "unknown" we want to know (!)
+      RM = pulldown resistance
 
-      Then we want to calculate the resistance over the FSR:
-       res_volt = Vcc * Rp / (Rp + Rfsr)
-      We know res_volt, Vcc, Rp (= pulldown resistance)
-      We want to know Rfsr
-
-      Some algebra:
-       res_volt = (Vcc * Rp) / (Rp + Rfsr) | start out with this
-       (Rp + Rfsr) * res_volt = Vcc * Rp   | both side times (R + FSR)
-       (Rp + Rfsr) = (Vcc * Rp) / res_volt | both sides divided by res_volt
-       Rfsr = ((Vcc * Rp) / res_volt) - Rp | both sides subtracted by R
+    So, in our words and some algebra:
+      res_volt = Vcc / (1 + (Rfsr / Rp))
+      
+      (1 + (Rfsr / Rp)) * res_volt = Vcc   | Div both sides by (1 + (Rfsr / Rp))
+      (1 + (Rfsr / Rp)) = (Vcc / res_volt) | Div both sides by res_volt
+      (Rfsr / Rp) = ((Vcc / res_volt) - 1) | Subtract both by 1
+      Rfsr = Rp * ((Vcc / res_volt) - 1)   | Multiply both by Rp
     """
+    def volt_to_Rfsr(self, volt):
+        # return ((self.Vcc * self.pulldown) / volt) - self.pulldown (old formula, works the same but less evidence)
+        return self.pulldown * ((self.Vcc / volt) - 1) if volt > 0 else 0
+
+    # Dodgy
     def sensor_val_to_N(self, val):
         res_volt = val * (self.Vcc / 1024) # Calc voltage over resistor in V (aprox. 5V supply, 10-bit reading, so 5/2^10 = 5/1024 V per value)
 
@@ -246,6 +253,14 @@ class FSR:
 
             if changed:
                 self.check_rec_pins()
+
+    def y_unit_change(self, val):
+        try:
+            i = self.y_unit_opts.index(val)
+        except ValueError:
+            val = self.y_unit_opts[0]
+            
+        self.ax1.set_ylabel(val)
                 
     def init_gui(self):
         # Initialize Tk, create layout elements
@@ -290,6 +305,14 @@ class FSR:
 
         self.cutoff_entry = Tk.Scale(master=self.controls_frame, length=150, from_=25, to=1000, resolution=25, label="Datapoints to show", orient=Tk.HORIZONTAL, variable=self.POP_CUTOFF)
 
+        # Y-axis unit selection
+        self.y_unit = Tk.StringVar()
+        self.y_unit_opts = ["Raw value (0-1023)", "Voltage (mV)", "Resistance (Ohm)", "Conductance (uS)"]
+        self.y_unit.set(self.y_unit_opts[self.OPT_RAW])
+        
+        self.unit_select_label = Tk.Label(master=self.controls_frame, text="Y-axis unit:")
+        self.unit_select_opts = Tk.OptionMenu(self.controls_frame, self.y_unit, *self.y_unit_opts, command=self.y_unit_change)
+        
         # Y-axis scaling
         self.Y_RANGE_LOW = Tk.IntVar()
         self.Y_RANGE_HIGH = Tk.IntVar()
@@ -315,6 +338,9 @@ class FSR:
         self.y_high_label.grid(row=7, column=0)
         self.y_high_entry.grid(row=7, column=1)
         self.scaling_label_under.grid(row=8, column=0, columnspan=2)
+
+        self.unit_select_label.grid(row=9, column=0, columnspan=2, pady=(10, 0))
+        self.unit_select_opts.grid(row=10, column=0, columnspan=2)
         
         self.status_frame.grid(row=0, column=0, sticky="nsew")
         self.controls_frame.grid(row=1, column=0, sticky="nsew", pady=10)
@@ -376,8 +402,7 @@ class FSR:
         self.ax1 = self.fig.add_subplot(111)
         self.ax1.set_autoscale_on(True)
         self.ax1.set_title("Sensor Data\n")
-        #self.ax1.set_ylabel("Sensor Value (N)")
-        self.ax1.set_ylabel("Sensor value (0-1023)")
+        self.ax1.set_ylabel(self.y_unit.get())
         self.ax1.set_xlabel("Time (ms)")
 
         # Instantiate a line in the graph for every pin we could potentially read
@@ -480,24 +505,25 @@ class FSR:
                         continue
                    
                     self.times[pin].append(timestamp)
-                    #self.resistor_data[pin].append(self.sensor_val_to_lux(res_val))
-                    #self.resistor_data[pin].append(self.sensor_val_to_N(res_val))
+                    #self.resistor_data[pin].append(res_val)
                     
-                    #self.resistor_data[pin].append(res_val * ((self.Vcc * 1000) / 1024)) # Displays voltage in mV on y-axis
+                    # Here we can interject and do calculations based on which y-axis unit we want to see
+                    opt = self.y_unit_opts.index(self.y_unit.get())
                     
-                    if res_val > 0:
-                        v = res_val * ((self.Vcc * 1000) / 1024)
-                        r = (((self.Vcc * 1000) * self.pulldown) / v) - self.pulldown
-
+                    if opt == self.OPT_RAW:
                         self.resistor_data[pin].append(res_val)
-                    else:
-                        self.resistor_data[pin].append(0)
-                    
+                    elif opt == self.OPT_VOLTAGE:
+                        self.resistor_data[pin].append(self.val_to_volt(res_val) * 1000)
+                    elif opt == self.OPT_RESISTANCE:
+                        self.resistor_data[pin].append(self.volt_to_Rfsr(self.val_to_volt(res_val)))
+                    elif opt == self.OPT_CONDUCTANCE:
+                        self.resistor_data[pin].append(10**6 / self.volt_to_Rfsr(self.val_to_volt(res_val)) if res_val > 0 else 0)
+
+                    self.lines[pin].set_data(self.times[pin], self.resistor_data[pin])
+
                     if len(self.times[pin]) > self.POP_CUTOFF.get():
                         self.times[pin] = self.times[pin][-self.POP_CUTOFF.get():]
                         self.resistor_data[pin] = self.resistor_data[pin][-self.POP_CUTOFF.get():]
-
-                    self.lines[pin].set_data(self.times[pin], self.resistor_data[pin])
 
             self.draw()
 

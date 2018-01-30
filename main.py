@@ -109,7 +109,11 @@ class FSR:
         if(val > 0):
             res_volt = self.val_to_volt(val)
             Rfsr = self.volt_to_Rfsr(res_volt)
-            cond = 1 / Rfsr # Conductance = 1 / Resistance and vice-versa
+
+            if Rfsr > 0:
+                cond = 1 / Rfsr # Conductance = 1 / Resistance and vice-versa
+            else:
+                return 0
             
             # y = 96892x-1,292
             force = 96892 * (Rfsr**-1.292)
@@ -166,7 +170,7 @@ class FSR:
 
     def rec_stop(self):
         self.recording = False
-        self.log("Stopping recording, took %i measurements" % self.curr_rec_count)
+        self.log("Stopping recording, saved %i measurements" % self.curr_rec_count)
 
         self.reset_vars()
 
@@ -503,7 +507,7 @@ class FSR:
                         self.save_data(data_in) # Save the data to file
 
                     # Display readout in the proper label
-                    self.sensor_readouts[pin].config(text="Pin A%i: %i mV / %.02f N" % (pin, self.val_to_volt(res_val), self.val_to_N(res_val)))
+                    self.sensor_readouts[pin].config(text="Pin A%i: %i mV / %.02f N" % (pin, self.val_to_volt(res_val) * 1000, self.val_to_N(res_val)))
                     
                     if not pin in self.SHOW_PINS: # Skip the pins we don't want/need to read
                         continue

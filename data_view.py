@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 
-f = open("sensordata/data_1516706033_1.txt")
+f = open("sensordata/data_1516971451_4.txt")
 lines = f.readlines()
 
 ts = []

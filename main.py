@@ -48,6 +48,9 @@ class FSR:
         self.OPT_VOLTAGE = 1
         self.OPT_RESISTANCE = 2
         self.OPT_CONDUCTANCE = 3
+        self.OPT_VOLTAGE_AVG = 4
+        self.OPT_RESISTANCE_AVG = 5
+        self.OPT_CONDUCTANCE_AVG = 6
 
         self.SHOW_PINS = [] # Linked to checkbuttons
         self.REC_PINS = [] #TEMPORARY! MAKE CHECKBOXES FOR
@@ -151,11 +154,13 @@ class FSR:
     # Reset variables for plotting
     def reset_vars(self):
         self.times = []
+        self.resistor_data_raw = []
         self.resistor_data = []
         
         for i in range(0, self.NUM_ANALOG):
             self.times.append([])
-            self.resistor_data.append([])
+            self.resistor_data_raw.append([]) # Raw sensor readouts, these are used for calculations
+            self.resistor_data.append([]) # Processed sensor readouts (voltage, resistance, etc.), these are drawn
             
             self.lines[i].set_data([], [])
 
@@ -241,6 +246,7 @@ class FSR:
             if changed:
                 self.log("Reset display data for Pin A%i" % i)
                 self.times[i] = []
+                self.resistor_data_raw[i] = []
                 self.resistor_data[i] = []
                 self.lines[i].set_data([], [])
 
@@ -303,19 +309,20 @@ class FSR:
 
         # Graph refresh scale
         self.REFRESH_MS = Tk.IntVar()
-        self.REFRESH_MS.set(100)
+        self.REFRESH_MS.set(250)
             
         self.refresh_entry = Tk.Scale(master=self.controls_frame, length=150, from_=1, to=1000, resolution=25, label="Graph refreshrate (ms)", orient=Tk.HORIZONTAL, variable=self.REFRESH_MS)
 
         # The amount of data points to show on screen
         self.POP_CUTOFF = Tk.IntVar()
-        self.POP_CUTOFF.set(100)
+        self.POP_CUTOFF.set(1000)
 
-        self.cutoff_entry = Tk.Scale(master=self.controls_frame, length=150, from_=25, to=1000, resolution=25, label="Datapoints to show", orient=Tk.HORIZONTAL, variable=self.POP_CUTOFF)
+        self.cutoff_entry = Tk.Scale(master=self.controls_frame, length=150, from_=100, to=2500, resolution=100, label="Datapoints to show", orient=Tk.HORIZONTAL, variable=self.POP_CUTOFF)
 
         # Y-axis unit selection
         self.y_unit = Tk.StringVar()
-        self.y_unit_opts = ["Raw value (0-1023)", "Voltage (mV)", "Resistance (Ohm)", "Conductance (uS)"]
+        self.y_unit_opts = ["Raw value (0-1023)", "Voltage (mV)", "Resistance (Ohm)", "Conductance (uS)", \
+                            "Avg. voltage (mV)", "Avg. resistance (Ohm)", "Avg. conductance (uS)"]
         self.y_unit.set(self.y_unit_opts[self.OPT_RAW])
         
         self.unit_select_label = Tk.Label(master=self.controls_frame, text="Y-axis unit:")
@@ -513,7 +520,7 @@ class FSR:
                         continue
                    
                     self.times[pin].append(timestamp)
-                    #self.resistor_data[pin].append(res_val)
+                    self.resistor_data_raw[pin].append(res_val)
                     
                     # Here we can interject and do calculations based on which y-axis unit we want to see
                     opt = self.y_unit_opts.index(self.y_unit.get())
@@ -521,16 +528,29 @@ class FSR:
                     if opt == self.OPT_RAW:
                         self.resistor_data[pin].append(res_val)
                     elif opt == self.OPT_VOLTAGE:
-                        self.resistor_data[pin].append(self.val_to_volt(res_val) * 1000)
+                        a = self.val_to_volt(res_val) * 1000
+                        self.resistor_data[pin].append(a)
                     elif opt == self.OPT_RESISTANCE:
-                        self.resistor_data[pin].append(self.volt_to_Rfsr(self.val_to_volt(res_val)))
+                        a = self.volt_to_Rfsr(self.val_to_volt(res_val))
+                        self.resistor_data[pin].append(a)
                     elif opt == self.OPT_CONDUCTANCE:
-                        self.resistor_data[pin].append(10**6 / self.volt_to_Rfsr(self.val_to_volt(res_val)) if res_val > 0 else 0)
+                        a = 10**6 / self.volt_to_Rfsr(self.val_to_volt(res_val)) if res_val > 0 else 0
+                        self.resistor_data[pin].append(a)
+                    elif opt == self.OPT_VOLTAGE_AVG:
+                        a = sum([self.val_to_volt(v) * 1000 for v in self.resistor_data_raw[pin]]) / len(self.resistor_data_raw[pin])
+                        self.resistor_data[pin].append(a)
+                    elif opt == self.OPT_RESISTANCE_AVG:
+                        a = sum([self.volt_to_Rfsr(self.val_to_volt(v)) for v in self.resistor_data_raw[pin]]) / len(self.resistor_data_raw[pin])
+                        self.resistor_data[pin].append(a)
+                    elif opt == self.OPT_CONDUCTANCE_AVG:
+                        a = sum([10**6 / self.volt_to_Rfsr(self.val_to_volt(v)) if v > 0 else 0 for v in self.resistor_data_raw[pin]]) / len(self.resistor_data_raw[pin])
+                        self.resistor_data[pin].append(a)
 
                     self.lines[pin].set_data(self.times[pin], self.resistor_data[pin])
 
                     if len(self.times[pin]) > self.POP_CUTOFF.get():
                         self.times[pin] = self.times[pin][-self.POP_CUTOFF.get():]
+                        self.resistor_data_raw[pin] = self.resistor_data_raw[pin][-self.POP_CUTOFF.get():]
                         self.resistor_data[pin] = self.resistor_data[pin][-self.POP_CUTOFF.get():]
 
             self.draw()

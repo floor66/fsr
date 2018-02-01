@@ -537,13 +537,13 @@ class FSR:
                         a = 10**6 / self.volt_to_Rfsr(self.val_to_volt(res_val)) if res_val > 0 else 0
                         self.resistor_data[pin].append(a)
                     elif opt == self.OPT_VOLTAGE_AVG:
-                        a = sum([self.val_to_volt(v) * 1000 for v in self.resistor_data_raw[pin]]) / len(self.resistor_data_raw[pin])
+                        a = sum([self.val_to_volt(v) * 1000 for v in self.resistor_data_raw[pin]]) / len(self.resistor_data_raw[pin]) if len(self.resistor_data_raw[pin]) > 0 else 0
                         self.resistor_data[pin].append(a)
                     elif opt == self.OPT_RESISTANCE_AVG:
-                        a = sum([self.volt_to_Rfsr(self.val_to_volt(v)) for v in self.resistor_data_raw[pin]]) / len(self.resistor_data_raw[pin])
+                        a = sum([self.volt_to_Rfsr(self.val_to_volt(v)) for v in self.resistor_data_raw[pin]]) / len(self.resistor_data_raw[pin]) if len(self.resistor_data_raw[pin]) > 0 else 0
                         self.resistor_data[pin].append(a)
                     elif opt == self.OPT_CONDUCTANCE_AVG:
-                        a = sum([10**6 / self.volt_to_Rfsr(self.val_to_volt(v)) if v > 0 else 0 for v in self.resistor_data_raw[pin]]) / len(self.resistor_data_raw[pin])
+                        a = sum([10**6 / self.volt_to_Rfsr(self.val_to_volt(v)) if v > 0 else 0 for v in self.resistor_data_raw[pin]]) / len(self.resistor_data_raw[pin]) if len(self.resistor_data_raw[pin]) > 0 else 0
                         self.resistor_data[pin].append(a)
 
                     self.lines[pin].set_data(self.times[pin], self.resistor_data[pin])

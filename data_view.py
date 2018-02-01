@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 
-f = open("sensordata/data_1517392556_4.txt")
+f = open("sensordata/data_1517492767_1.txt")
 lines = f.readlines()
 
 FREQ = 50
@@ -42,6 +42,6 @@ for val in vs:
 plt.plot([t/60000 for t in ts], vs_avg)
 #plt.plot([t/60000 for t in ts], vs)
 plt.xlim(0, ts[-1]/60000)
-plt.ylim(0, 0.2*10**6)
+#plt.ylim(0, 0.2*10**6)
 plt.grid()
 plt.show()

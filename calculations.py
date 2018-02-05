@@ -1,4 +1,11 @@
-class FSRCalculations:
+"""
+    calculations.py
+    Created by Floris P.J. den Hartog, 2018
+
+    File for calculations with raw FSR data, based on FSR specs/laws of physics
+"""
+
+class calculations:
     def __init__(self, Vcc, pulldown):
         self.Vcc = Vcc
         self.pulldown = pulldown

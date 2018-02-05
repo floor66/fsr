@@ -10,14 +10,9 @@ import matplotlib
 matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.pyplot as plt
-import serial
-import time
 import tkinter as Tk
-
-from calculations import *
-
-# Get current timestamp in ms
-millis = lambda: int(round(time.time() * 1000.0))
+import time, serial, calculations, logger
+from utils import millis, timerunning, touch
 
 class FSR:
     def __init__(self):
@@ -37,12 +32,12 @@ class FSR:
 #############################################################################################
         
         # Misc. variable setup, don't touch
-        self.calc = FSRCalculations(self.Vcc, self.pulldown)
+        self.calc = calculations.calculations(self.Vcc, self.pulldown)
         
         self.recordings = 0
         self.curr_rec_count = 0
         
-        self.LOG_FILE = "logs/log_%i.txt" % self.__start__
+        self.logger = logger.logger("logs/log_%i.txt" % self.__start__, self.__start__)
         self.recording = False
 
         self.OPT_RAW = 0
@@ -55,30 +50,11 @@ class FSR:
 
         self.SHOW_PINS = [] # Linked to checkbuttons
         self.REC_PINS = [] # Linked to checkbuttons
-        self.touch(self.LOG_FILE) # Generate an empty log file
 
-        self.log("Logging started @ %s (GMT)" % time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()))
+        self.logger.log("Logging started @ %s (GMT)" % time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()))
         self.init_gui()
         self.reset_vars()
 
-    def timerunning(self, sec):
-        m, s = divmod(sec, 60)
-        h, m = divmod(m, 60)
-        
-        return "%d:%02d:%02d" % (h, m, s)
-
-    # Log to console and to a log file
-    def log(self, msg):
-        timerunning = self.timerunning(time.time() - self.__start__)
-        
-        print("%s - %s" % (timerunning, msg))
-        
-        file = open(self.LOG_FILE, "a")
-        file.write("%s - " % timerunning)
-        file.write(str(msg))
-        file.write("\n")
-        file.close()
-    
     # At-a-glance status label
     def status(self, txt):
         self.status_lbl.configure(text="%s" % txt)
@@ -88,11 +64,6 @@ class FSR:
         self.root.update_idletasks()
         self.root.update()
 
-    # Create an empty file
-    def touch(self, name):
-        file = open(name, "w")
-        file.close()
-    
     # Appending to data file
     def save_data(self, data):
         try:
@@ -100,7 +71,7 @@ class FSR:
             file.write(data)
             file.close()
         except Exception as e:
-            self.log("Error saving data %s" % e)
+            self.logger.log("Error saving data %s" % e)
 
     # Reset variables for plotting
     def reset_vars(self):
@@ -118,15 +89,15 @@ class FSR:
     def check_rec_pins(self):
         if self.recording:
             if len(self.REC_PINS) > 0:
-                self.log("Recording from pin%s A%s" % ("s" if len(self.REC_PINS) > 1 else "", ", A".join(str(pin) for pin in self.REC_PINS)))
+                self.logger.log("Recording from pin%s A%s" % ("s" if len(self.REC_PINS) > 1 else "", ", A".join(str(pin) for pin in self.REC_PINS)))
                 self.status("Recording #%i active...\nSaving: A%s" % (self.recordings, ", A".join(str(pin) for pin in self.REC_PINS)))
             else:
-                self.log("Warning: no data is being saved! Please check 'Save data' for the pin(s) you wish to record.")
+                self.logger.log("Warning: no data is being saved! Please check 'Save data' for the pin(s) you wish to record.")
                 self.status("Recording #%i active...\nWarning: no data is being saved!" % self.recordings)
 
     def rec_stop(self):
         self.recording = False
-        self.log("Stopping recording, saved %i measurements" % self.curr_rec_count)
+        self.logger.log("Stopping recording, saved %i measurements" % self.curr_rec_count)
 
         self.reset_vars()
 
@@ -135,7 +106,7 @@ class FSR:
         except AttributeError:
             pass # Occurs when the serial connection was never established
         except Exception as e:
-            self.log(e)
+            self.logger.log(e)
             
         self.rec_stop_btn.configure(state="disabled")
         self.rec_start_btn.configure(state="normal")
@@ -153,10 +124,10 @@ class FSR:
             self.status("Connection initiated (COM port: %s)" % self.COM_PORT)
             self.recordings += 1
             self.SAVE_FILE = "sensordata/data_%i_%i.txt" % (self.__start__, self.recordings)
-            self.touch(self.SAVE_FILE) # Generate a new, empty data file
+            touch(self.SAVE_FILE) # Generate a new, empty data file
 
-            self.log("Arduino initialized, starting recording #%i of this session" % self.recordings)
-            self.log("Currently recording to file: %s" % self.SAVE_FILE)
+            self.logger.log("Arduino initialized, starting recording #%i of this session" % self.recordings)
+            self.logger.log("Currently recording to file: %s" % self.SAVE_FILE)
             self.save_data("; Recording @ 50 Hz\n")
             self.save_data("; Vcc = %.02f V, pulldown = %i Ohm\n" % (self.Vcc, self.pulldown))
             self.save_data("; Key: time (ms), pin (A0-5), readout (0-1023)\n")
@@ -171,14 +142,14 @@ class FSR:
             self.rec_stop_btn.configure(state="disabled")
 
             self.status("Connection failed")
-            self.log("Connection failed")
+            self.logger.log("Connection failed")
 
     def quit_gui(self):
         if Tk.messagebox.askokcancel("Quit", "Do you want to quit?"):
             self.root.quit()
             self.root.destroy()
 
-            self.log("GUI exit")
+            self.logger.log("GUI exit")
 
     def toggle_sensor_display(self):
         for i in range(0, self.NUM_ANALOG):
@@ -195,7 +166,7 @@ class FSR:
                     changed = True
 
             if changed:
-                self.log("Reset display data for Pin A%i" % i)
+                self.logger.log("Reset display data for Pin A%i" % i)
                 self.times[i] = []
                 self.resistor_data_raw[i] = []
                 self.resistor_data[i] = []
@@ -402,7 +373,7 @@ class FSR:
             except serial.serialutil.SerialException as e:
                 if (millis() - timer) >= 1000: # Give an error every second
                     self.status("Connect Arduino to USB!")
-                    self.log("Connect Arduino to USB!")
+                    self.logger.log("Connect Arduino to USB!")
                     timer = millis()
 
         # Wait for the go-ahead from Arduino
@@ -423,10 +394,10 @@ class FSR:
                         self.can_start = True
                         return True
                 except Exception as e:
-                    self.log(e)
+                    self.logger.log(e)
 
             if (millis() - timer) >= (self.INIT_TIMEOUT * 1000):
-                self.log("Arduino failed to initialize after %i sec" % self.INIT_TIMEOUT)
+                self.logger.log("Arduino failed to initialize after %i sec" % self.INIT_TIMEOUT)
                 return False
 
     # Main loop
@@ -441,7 +412,7 @@ class FSR:
             try:
                 data_in = self.ser.readline()
             except serial.serialutil.SerialException as e:
-                self.log("Reading from the serial port failed: %s" % e)
+                self.logger.log("Reading from the serial port failed: %s" % e)
             finally:
                 if not self.recording:
                     return
@@ -457,7 +428,7 @@ class FSR:
                         pin = int(unpack[1])
                         res_val = int(unpack[2])
                     except ValueError:
-                        self.log("Faulty serial communication: %s" % ",".join(unpack))
+                        self.logger.log("Faulty serial communication: %s" % ",".join(unpack))
                         continue
 
                     if pin in self.REC_PINS:
@@ -508,57 +479,59 @@ class FSR:
 
             self.draw()
 
+    # Adjust scale of axes according to data/entries
+    def do_auto_scale(self):
+        # Required to properly scale axes
+        self.data_plot.relim()
+        self.data_plot.autoscale_view(True, True, True)
+
+        try:
+            low_entry = int(self.Y_RANGE_LOW.get())
+        except Exception as e:
+            low_entry = None
+
+        try:
+            high_entry = int(self.Y_RANGE_HIGH.get())
+        except Exception as e:
+            high_entry = None
+
+        low_data = None
+        high_data = None
+        
+        for i in range(0, self.NUM_ANALOG):
+            try:
+                min_ = min(self.resistor_data[i])
+                max_ = max(self.resistor_data[i])
+
+                if (low_data is None) or (min_ < low_data):
+                    low_data = min_
+
+                if (high_data is None) or (max_ > high_data):
+                    high_data = max_
+            except ValueError:
+                pass
+            except Exception:
+                raise
+
+        if low_entry is not None:
+            if high_entry is not None:
+                self.data_plot.set_ylim(low_entry, high_entry)
+            else:
+                self.data_plot.set_ylim(low_entry, high_data + ((high_data if high_data > 0 else 1) * 0.05))
+        else:
+            if high_entry is not None:
+                self.data_plot.set_ylim(low_data - ((low_data if low_data > 0 else 1) * 0.05), high_entry)
+            else:
+                self.data_plot.set_ylim(low_data - ((low_data if low_data > 0 else 1) * 0.05), \
+                                  high_data + ((high_data if high_data > 0 else 1) * 0.05))
+
     def draw(self):
         # Draw when it's time to draw!
         if (millis() - self.draw_timer) >= self.REFRESH_MS.get():
             self.draw_timer = millis()
 
-            self.data_plot.set_title("Sensor data\nRecording: %s\n" % self.timerunning(time.time() - self.__rec_start__))
-            
-            # Required to properly scale axes
-            self.data_plot.relim()
-            self.data_plot.autoscale_view(True, True, True)
-
-            # Adjust scale of axes according to data/entries
-            try:
-                low_entry = int(self.Y_RANGE_LOW.get())
-            except Exception as e:
-                low_entry = None
-
-            try:
-                high_entry = int(self.Y_RANGE_HIGH.get())
-            except Exception as e:
-                high_entry = None
-
-            low_data = None
-            high_data = None
-            
-            for i in range(0, self.NUM_ANALOG):
-                try:
-                    min_ = min(self.resistor_data[i])
-                    max_ = max(self.resistor_data[i])
-
-                    if (low_data is None) or (min_ < low_data):
-                        low_data = min_
-
-                    if (high_data is None) or (max_ > high_data):
-                        high_data = max_
-                except ValueError:
-                    pass
-                except Exception:
-                    raise
-
-            if low_entry is not None:
-                if high_entry is not None:
-                    self.data_plot.set_ylim(low_entry, high_entry)
-                else:
-                    self.data_plot.set_ylim(low_entry, high_data + ((high_data if high_data > 0 else 1) * 0.05))
-            else:
-                if high_entry is not None:
-                    self.data_plot.set_ylim(low_data - ((low_data if low_data > 0 else 1) * 0.05), high_entry)
-                else:
-                    self.data_plot.set_ylim(low_data - ((low_data if low_data > 0 else 1) * 0.05), \
-                                      high_data + ((high_data if high_data > 0 else 1) * 0.05))
+            self.data_plot.set_title("Sensor data\nRecording: %s\n" % timerunning(time.time() - self.__rec_start__))
+            self.do_auto_scale()
 
             # Speeds up drawing tremendously
             self.data_plot.draw_artist(self.data_plot.patch)

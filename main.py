@@ -53,7 +53,7 @@ class FSR:
         self.OPT_CONDUCTANCE_AVG = 6
 
         self.SHOW_PINS = [] # Linked to checkbuttons
-        self.REC_PINS = [] #TEMPORARY! MAKE CHECKBOXES FOR
+        self.REC_PINS = [] # Linked to checkbuttons
         self.touch(self.LOG_FILE) # Generate an empty log file
 
         self.log("Logging started @ %s (GMT)" % time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()))
@@ -118,8 +118,8 @@ class FSR:
             else:
                 return 0
             
-            # y = 96892x-1,292
-            force = 96892 * (Rfsr**-1.292)
+            #   y = 96892x-1,292 (in grams), so * g for newton
+            force = (96892 * (Rfsr**-1.292)) * 9.8066500286389
             # Not really correct, reference website rounded too much
 
             return force

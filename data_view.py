@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 
-f = open("sensordata/data_1517492767_1.txt")
+f = open("sensordata/data_1517492767_4.txt")
 lines = f.readlines()
 
 FREQ = 50
@@ -25,7 +25,7 @@ for l in lines:
                         r = 10000 * ((5.06 / voltage) - 1)
                         
                         ts.append(t)
-                        vs.append(r)
+                        vs.append(voltage)
                     else:
                         ts.append(t)
                         vs.append(0)
@@ -39,9 +39,9 @@ for val in vs:
 
     vs_avg.append(ct / i)
 
-plt.plot([t/60000 for t in ts], vs_avg)
-#plt.plot([t/60000 for t in ts], vs)
-plt.xlim(0, ts[-1]/60000)
-#plt.ylim(0, 0.2*10**6)
+#plt.plot([t/60000 for t in ts], vs_avg)
+plt.plot([t/60000 for t in ts], vs)
+#plt.xlim(, ts[-1]/60000)
+plt.ylim(0, 5.07)
 plt.grid()
 plt.show()

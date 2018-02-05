@@ -60,7 +60,7 @@ class FSR:
         self.status_lbl.configure(text="%s" % txt)
 
     # Update the GUI
-    def update(self):
+    def update_gui(self):
         self.root.update_idletasks()
         self.root.update()
 
@@ -84,7 +84,7 @@ class FSR:
             self.resistor_data_raw.append([]) # Raw sensor readouts, these are used for calculations
             self.resistor_data.append([]) # Processed sensor readouts (voltage, resistance, etc.), these are drawn
             
-            self.lines[i].set_data([], [])
+            self.plot_lines[i].set_data([], [])
 
     def check_rec_pins(self):
         if self.recording:
@@ -170,7 +170,7 @@ class FSR:
                 self.times[i] = []
                 self.resistor_data_raw[i] = []
                 self.resistor_data[i] = []
-                self.lines[i].set_data([], [])
+                self.plot_lines[i].set_data([], [])
 
     def toggle_sensor_record(self):
         for i in range(0, self.NUM_ANALOG):
@@ -331,9 +331,12 @@ class FSR:
         # Apply grid to right panel
         self.panel_right.grid(row=0, column=2, sticky="n")
 
+        # Instantiate Tk window for the first time
+        self.update_gui()
+
     def init_mpl(self):
         # Initialize matplotlib
-        self.lines = []
+        self.plot_lines = []
         self.cols = ["b-", "r-", "g-", "b-", "m-", "c-"]
         self.fig = plt.figure()
         self.data_plot = self.fig.add_subplot(111)
@@ -345,7 +348,7 @@ class FSR:
         # Instantiate a line in the graph for every pin we could potentially read
         for i in range(0, self.NUM_ANALOG):
             tmp, = self.data_plot.plot([], [], self.cols[i])
-            self.lines.append(tmp)
+            self.plot_lines.append(tmp)
 
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.canvas_container)
         self.canvas.show()
@@ -353,16 +356,13 @@ class FSR:
 
         self.canvas_container.grid(row=0, column=1, sticky="nesw")
 
-        # Instantiate Tk window for the first time
-        self.update()
-
     def init_serial(self):
         self.can_start = False # To wait for Arduino to give the go-ahead
 
         # Wait for serial connection
         timer = millis()
         while True:
-            self.update()
+            self.update_gui()
 
             if not self.recording:
                 return False
@@ -379,7 +379,7 @@ class FSR:
         # Wait for the go-ahead from Arduino
         timer = millis()
         while True:
-            self.update()
+            self.update_gui()
 
             if not self.recording:
                 return False
@@ -407,7 +407,7 @@ class FSR:
         
         self.draw_timer = millis()
         while self.recording:
-            self.update()
+            self.update_gui()
             
             try:
                 data_in = self.ser.readline()
@@ -470,7 +470,7 @@ class FSR:
                             if len(self.resistor_data_raw[pin]) > 0 else 0
                         self.resistor_data[pin].append(a)
 
-                    self.lines[pin].set_data(self.times[pin], self.resistor_data[pin])
+                    self.plot_lines[pin].set_data(self.times[pin], self.resistor_data[pin])
 
                     if len(self.times[pin]) > self.POP_CUTOFF.get():
                         self.times[pin] = self.times[pin][-self.POP_CUTOFF.get():]
@@ -538,7 +538,7 @@ class FSR:
 
             for i in range(0, self.NUM_ANALOG):
                 if i in self.SHOW_PINS:
-                    self.data_plot.draw_artist(self.lines[i])
+                    self.data_plot.draw_artist(self.plot_lines[i])
                 
             self.fig.canvas.draw_idle()
             self.fig.canvas.flush_events()

@@ -14,14 +14,14 @@ import serial
 import time
 import tkinter as Tk
 
+from calculations import *
+
 # Get current timestamp in ms
 millis = lambda: int(round(time.time() * 1000.0))
 
 class FSR:
     def __init__(self):
         self.__start__ = time.time()
-        self.recordings = 0
-        self.curr_rec_count = 0
         
 ####### User defined variables ##############################################################
         self.COM_PORT = "COM5" # Seen in the bottom-right of the Arduino IDE
@@ -31,16 +31,17 @@ class FSR:
 
         self.Vcc = 5.06 # Input voltage of Arduino in V
 
-        # If both are None, autofit is used
-        #self.Y_RANGE_LOW = -10
-        #self.Y_RANGE_HIGH = 1023
-
         self.NUM_ANALOG = 6 # 6 max possible analog pins
         
         self.pulldown = 10000 # 10 kOhm pulldown resistance
 #############################################################################################
         
         # Misc. variable setup, don't touch
+        self.calc = FSRCalculations(self.Vcc, self.pulldown)
+        
+        self.recordings = 0
+        self.curr_rec_count = 0
+        
         self.LOG_FILE = "logs/log_%i.txt" % self.__start__
         self.recording = False
 
@@ -81,56 +82,6 @@ class FSR:
     # At-a-glance status label
     def status(self, txt):
         self.status_lbl.configure(text="%s" % txt)
-
-    def val_to_volt(self, val):
-        return val * (self.Vcc / (2**10 - 1)) if val > 0 else 0
-
-    """
-    FSR spec sheet says:
-      VOUT = (V+) / [1 + RFSR/RM]
-      
-    Where:
-      VOUT is measured by Arduino on the analog pin
-        the pin gives a value of 0-1023, corresponding to (Vcc / 2^10) different "steps" of voltage
-      V+ = Vcc (power source to Arduino)
-      RFSR = the "unknown" we want to know (!)
-      RM = pulldown resistance
-
-    So, in our words and some algebra:
-      res_volt = Vcc / (1 + (Rfsr / Rp))
-      
-      (1 + (Rfsr / Rp)) * res_volt = Vcc   | Div both sides by (1 + (Rfsr / Rp))
-      (1 + (Rfsr / Rp)) = (Vcc / res_volt) | Div both sides by res_volt
-      (Rfsr / Rp) = ((Vcc / res_volt) - 1) | Subtract both by 1
-      Rfsr = Rp * ((Vcc / res_volt) - 1)   | Multiply both by Rp
-    """
-    def volt_to_Rfsr(self, volt):
-        # return ((self.Vcc * self.pulldown) / volt) - self.pulldown (old formula, works the same but less evidence)
-        return self.pulldown * ((self.Vcc / volt) - 1) if volt > 0 else 0
-
-    def val_to_N(self, val):
-        if(val > 0):
-            res_volt = self.val_to_volt(val)
-            Rfsr = self.volt_to_Rfsr(res_volt)
-
-            if Rfsr > 0:
-                cond = 1 / Rfsr # Conductance = 1 / Resistance and vice-versa
-            else:
-                return 0
-            
-            #   y = 96892x-1,292 (in grams), so * g for newton
-            force = (96892 * (Rfsr**-1.292)) * 9.8066500286389
-            # Not really correct, reference website rounded too much
-
-            return force
-
-            """
-            #print("Vfsr = %.10f V" % res_volt)
-            #print("Rfsr = %.10f Ohm" % Rfsr)
-            #print("Cfsr = %.10f S" % cond)
-            """
-        else:
-            return 0
 
     # Update the GUI
     def update(self):
@@ -273,7 +224,7 @@ class FSR:
         except ValueError:
             val = self.y_unit_opts[0]
 
-        self.ax1.set_ylabel(val)
+        self.data_plot.set_ylabel(val)
         self.reset_vars()
                 
     def init_gui(self):
@@ -414,15 +365,15 @@ class FSR:
         self.lines = []
         self.cols = ["b-", "r-", "g-", "b-", "m-", "c-"]
         self.fig = plt.figure()
-        self.ax1 = self.fig.add_subplot(111)
-        self.ax1.set_autoscale_on(True)
-        self.ax1.set_title("Sensor Data\n")
-        self.ax1.set_ylabel(self.y_unit.get())
-        self.ax1.set_xlabel("Time (ms)")
+        self.data_plot = self.fig.add_subplot(111)
+        self.data_plot.set_autoscale_on(True)
+        self.data_plot.set_title("Sensor Data\n")
+        self.data_plot.set_ylabel(self.y_unit.get())
+        self.data_plot.set_xlabel("Time (ms)")
 
         # Instantiate a line in the graph for every pin we could potentially read
         for i in range(0, self.NUM_ANALOG):
-            tmp, = self.ax1.plot([], [], self.cols[i])
+            tmp, = self.data_plot.plot([], [], self.cols[i])
             self.lines.append(tmp)
 
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.canvas_container)
@@ -514,7 +465,7 @@ class FSR:
                         self.save_data(data_in) # Save the data to file
 
                     # Display readout in the proper label
-                    self.sensor_readouts[pin].config(text="Pin A%i: %i mV / %.02f N" % (pin, self.val_to_volt(res_val) * 1000, self.val_to_N(res_val)))
+                    self.sensor_readouts[pin].config(text="Pin A%i: %i mV / %.02f N" % (pin, self.calc.val_to_volt(res_val) * 1000, self.calc.val_to_N(res_val)))
                     
                     if not pin in self.SHOW_PINS: # Skip the pins we don't want/need to read
                         continue
@@ -528,22 +479,24 @@ class FSR:
                     if opt == self.OPT_RAW:
                         self.resistor_data[pin].append(res_val)
                     elif opt == self.OPT_VOLTAGE:
-                        a = self.val_to_volt(res_val) * 1000
+                        a = self.calc.val_to_volt(res_val) * 1000
                         self.resistor_data[pin].append(a)
                     elif opt == self.OPT_RESISTANCE:
-                        a = self.volt_to_Rfsr(self.val_to_volt(res_val))
+                        a = self.calc.volt_to_Rfsr(self.calc.val_to_volt(res_val))
                         self.resistor_data[pin].append(a)
                     elif opt == self.OPT_CONDUCTANCE:
-                        a = 10**6 / self.volt_to_Rfsr(self.val_to_volt(res_val)) if res_val > 0 else 0
+                        a = 10**6 / self.calc.volt_to_Rfsr(self.calc.val_to_volt(res_val)) if res_val > 0 else 0
                         self.resistor_data[pin].append(a)
                     elif opt == self.OPT_VOLTAGE_AVG:
-                        a = sum([self.val_to_volt(v) * 1000 for v in self.resistor_data_raw[pin]]) / len(self.resistor_data_raw[pin]) if len(self.resistor_data_raw[pin]) > 0 else 0
+                        a = sum([self.calc.val_to_volt(v) * 1000 for v in self.resistor_data_raw[pin]]) / len(self.resistor_data_raw[pin]) if len(self.resistor_data_raw[pin]) > 0 else 0
                         self.resistor_data[pin].append(a)
                     elif opt == self.OPT_RESISTANCE_AVG:
-                        a = sum([self.volt_to_Rfsr(self.val_to_volt(v)) for v in self.resistor_data_raw[pin]]) / len(self.resistor_data_raw[pin]) if len(self.resistor_data_raw[pin]) > 0 else 0
+                        a = sum([self.calc.volt_to_Rfsr(self.calc.val_to_volt(v)) for v in self.resistor_data_raw[pin]]) / len(self.resistor_data_raw[pin]) \
+                            if len(self.resistor_data_raw[pin]) > 0 else 0
                         self.resistor_data[pin].append(a)
                     elif opt == self.OPT_CONDUCTANCE_AVG:
-                        a = sum([10**6 / self.volt_to_Rfsr(self.val_to_volt(v)) if v > 0 else 0 for v in self.resistor_data_raw[pin]]) / len(self.resistor_data_raw[pin]) if len(self.resistor_data_raw[pin]) > 0 else 0
+                        a = sum([10**6 / self.calc.volt_to_Rfsr(self.calc.val_to_volt(v)) if v > 0 else 0 for v in self.resistor_data_raw[pin]]) / len(self.resistor_data_raw[pin]) \
+                            if len(self.resistor_data_raw[pin]) > 0 else 0
                         self.resistor_data[pin].append(a)
 
                     self.lines[pin].set_data(self.times[pin], self.resistor_data[pin])
@@ -560,11 +513,11 @@ class FSR:
         if (millis() - self.draw_timer) >= self.REFRESH_MS.get():
             self.draw_timer = millis()
 
-            self.ax1.set_title("Sensor data\nRecording: %s\n" % self.timerunning(time.time() - self.__rec_start__))
+            self.data_plot.set_title("Sensor data\nRecording: %s\n" % self.timerunning(time.time() - self.__rec_start__))
             
             # Required to properly scale axes
-            self.ax1.relim()
-            self.ax1.autoscale_view(True, True, True)
+            self.data_plot.relim()
+            self.data_plot.autoscale_view(True, True, True)
 
             # Adjust scale of axes according to data/entries
             try:
@@ -597,22 +550,22 @@ class FSR:
 
             if low_entry is not None:
                 if high_entry is not None:
-                    self.ax1.set_ylim(low_entry, high_entry)
+                    self.data_plot.set_ylim(low_entry, high_entry)
                 else:
-                    self.ax1.set_ylim(low_entry, high_data + ((high_data if high_data > 0 else 1) * 0.05))
+                    self.data_plot.set_ylim(low_entry, high_data + ((high_data if high_data > 0 else 1) * 0.05))
             else:
                 if high_entry is not None:
-                    self.ax1.set_ylim(low_data - ((low_data if low_data > 0 else 1) * 0.05), high_entry)
+                    self.data_plot.set_ylim(low_data - ((low_data if low_data > 0 else 1) * 0.05), high_entry)
                 else:
-                    self.ax1.set_ylim(low_data - ((low_data if low_data > 0 else 1) * 0.05), \
+                    self.data_plot.set_ylim(low_data - ((low_data if low_data > 0 else 1) * 0.05), \
                                       high_data + ((high_data if high_data > 0 else 1) * 0.05))
 
             # Speeds up drawing tremendously
-            self.ax1.draw_artist(self.ax1.patch)
+            self.data_plot.draw_artist(self.data_plot.patch)
 
             for i in range(0, self.NUM_ANALOG):
                 if i in self.SHOW_PINS:
-                    self.ax1.draw_artist(self.lines[i])
+                    self.data_plot.draw_artist(self.lines[i])
                 
             self.fig.canvas.draw_idle()
             self.fig.canvas.flush_events()

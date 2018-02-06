@@ -7,7 +7,9 @@ FREQ = 50
 MOD_DIV = 1/50 # Show only every x seconds
 
 ts = []
-vs = []
+vals = []
+volts = []
+resists = []
 i = 0
 for l in lines:
     i += 1
@@ -25,23 +27,59 @@ for l in lines:
                         r = 10000 * ((5.06 / voltage) - 1)
                         
                         ts.append(t)
-                        vs.append(voltage)
+                        vals.append(v)
+                        volts.append(voltage)
+                        resists.append(r)
                     else:
                         ts.append(t)
-                        vs.append(0)
+                        vals.append(0)
+                        volts.append(0)
+                        resists.append(None)
 
-vs_avg = []
-ct = 0
-i = 0
-for val in vs:
-    i += 1
-    ct += val
+vals_avg = [None]
+volts_avg = [None]
+resists_avg = [None]
+sum_ = 0
 
-    vs_avg.append(ct / i)
+for i, val in enumerate(vals):
+    if i > 0:
+        sum_ += val
 
-#plt.plot([t/60000 for t in ts], vs_avg)
-plt.plot([t/60000 for t in ts], vs)
+        vals_avg.append(sum_ / i)
+
+        if sum_ > 0:
+            voltage = ((sum_ / i) * (5.06 / 1023))
+            r = 10000 * ((5.06 / voltage) - 1)
+
+            volts_avg.append(voltage)
+            resists_avg.append(r)
+
+N = 50 * 20 # mavg window, 50/sec
+vals_mavg = [None for i in range(N)]
+volts_mavg = [None for i in range(N)]
+resists_mavg = [None for i in range(N)]
+sum_ = [0]
+
+for i, val in enumerate(vals):
+    if i > 0:
+        sum_.append(sum_[i - 1] + val)
+
+        if i >= N:
+            vals_mavg.append((sum_[i] - sum_[i - N]) / N)
+            
+            if (sum_[i - 1] + val) > 0:
+                voltage = (((sum_[i] - sum_[i - N]) / N) * (5.06 / 1023))
+                r = 10000 * ((5.06 / voltage) - 1)
+
+                volts_mavg.append(voltage)
+                resists_mavg.append(r)
+
+to_show = "resists"
+
+plt.plot([t/60000 for t in ts], eval(to_show), "b-")
+plt.plot([t/60000 for t in ts], eval("%s_avg" % to_show), "r-")
+plt.plot([t/60000 for t in ts], eval("%s_mavg" % to_show), "m-", linewidth=2.0)
 #plt.xlim(, ts[-1]/60000)
-plt.ylim(0, 5.07)
+#plt.ylim(0, 1023)
 plt.grid()
 plt.show()

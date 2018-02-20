@@ -68,6 +68,7 @@ class FSR:
         self.calc = calculations.calculations(self.Vcc.get(), self.pulldown.get())
 
         self.times = []
+        self.annotations = []
         self.resistor_data_raw = []
         self.resistor_data = []
         
@@ -116,7 +117,11 @@ class FSR:
             self.status("Connection initiated (COM port: %s)" % self.COM_PORT)
             self.recordings += 1
             self.SAVE_FILE = "sensordata/data_%i_%i.txt" % (self.__start__, self.recordings)
-            touch(self.SAVE_FILE) # Generate a new, empty data file
+            self.ANNOTATION_FILE = "sensordata/annotations_%i_%i.txt" % (self.__start__, self.recordings)
+
+            # Generate new, empty data files
+            touch(self.SAVE_FILE)       
+            touch(self.ANNOTATION_FILE)
 
             self.logger.log("Arduino initialized, starting recording #%i of this session" % self.recordings)
             self.logger.log("Currently recording to file: %s" % self.SAVE_FILE)
@@ -189,7 +194,31 @@ class FSR:
 
         self.data_plot.set_ylabel(val)
         self.reset_vars()
-                
+
+    def add_annotation(self, e):
+        if len(self.SHOW_PINS) == 0:
+            self.logger.log("Can't add a annotation if no data is being shown")
+            return
+            
+        t = self.times[self.SHOW_PINS[0]][-1]
+        msg = Tk.simpledialog.askstring("Add annotation", "Message (optional):", parent=self.root)
+
+        if msg is not None:
+            ln = self.data_plot.axvline(x=t, color="#000000", linewidth=2)
+
+            txt = self.data_plot.text(t, 0, " %s" % msg, fontsize=16)
+            
+            self.annotations.append((t, msg, ln, txt))
+            
+            data = "%s,%s\n" % (t, msg)
+            
+            try:
+                file = open(self.ANNOTATION_FILE, "a")
+                file.write(data)
+                file.close()
+            except Exception as e:
+                self.logger.log("Error saving data %s" % e)
+     
     def init_gui(self):
         # Initialize Tk, create layout elements
         self.root = Tk.Tk()
@@ -202,6 +231,9 @@ class FSR:
 
         # So that we lose Entry focus on clicking anywhere
         self.root.bind_all("<1>", lambda event:event.widget.focus_set())
+
+        # For adding timestamps
+        self.root.bind("<space>", self.add_annotation)
 
         self.panel_left = Tk.Frame(master=self.root)
         self.panel_right = Tk.Frame(master=self.root)
@@ -561,6 +593,20 @@ class FSR:
         # Draw when it's time to draw!
         if (millis() - self.draw_timer) >= self.REFRESH_MS.get():
             self.draw_timer = millis()
+
+            # Remove annotations that are no longer in the current time window
+            for i in range(0, len(self.annotations)):
+                try:
+                    t, msg, ln, txt = self.annotations[i]
+
+                    if (t <= self.data_plot.get_xlim()[0]):
+                        ln.remove()
+                        del ln
+                        txt.remove()
+                        del txt
+                        del self.annotations[i]
+                except IndexError:
+                    break
 
             self.data_plot.set_title("Sensor data\nRecording: %s\n" % timerunning(time.time() - self.__rec_start__))
             self.do_auto_scale()

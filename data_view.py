@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 
-f = open("sensordata/data_1517492767_4.txt")
+f = open("sensordata/data_1518607640_2.txt")
 lines = f.readlines()
 
 FREQ = 50
@@ -69,17 +69,25 @@ for i, val in enumerate(vals):
             
             if (sum_[i - 1] + val) > 0:
                 voltage = (((sum_[i] - sum_[i - N]) / N) * (5.06 / 1023))
-                r = 10000 * ((5.06 / voltage) - 1)
+                r = 10000 * ((5.06 / voltage) - 1) if voltage > 0 else 0
 
                 volts_mavg.append(voltage)
                 resists_mavg.append(r)
 
-to_show = "resists"
+to_show = "vals"
+avg = eval("%s_avg" % to_show)
+mavg = eval("%s_mavg" % to_show)
+
+if len(ts) > len(avg):
+    avg = avg[:len(ts)]
+
+if len(ts) > len(mavg):
+    mavg = mavg[:len(ts)]
 
 plt.plot([t/60000 for t in ts], eval(to_show), "b-")
-plt.plot([t/60000 for t in ts], eval("%s_avg" % to_show), "r-")
-plt.plot([t/60000 for t in ts], eval("%s_mavg" % to_show), "m-", linewidth=2.0)
+plt.plot([t/60000 for t in ts], avg, "r-")
+plt.plot([t/60000 for t in ts], mavg, "m-", linewidth=2.0)
 #plt.xlim(, ts[-1]/60000)
-#plt.ylim(0, 1023)
+#plt.ylim(0, 1024)
 plt.grid()
 plt.show()

@@ -19,21 +19,11 @@ class FSR:
         self.__start__ = time.time()
         
 ####### User defined variables ##############################################################
-        self.COM_PORT = "COM5" # Seen in the bottom-right of the Arduino IDE
-
-        self.BAUD_RATE = 500000 # Needs to coincide with Arduino code "Serial.begin(...)" (!)
-        self.INIT_TIMEOUT = 5 # The amount of seconds to wait for Arduino to initialize
-
-        self.Vcc = 5.06 # Input voltage of Arduino in V
-
-        self.NUM_ANALOG = 6 # 6 max possible analog pins
-        
-        self.pulldown = 10000 # 10 kOhm pulldown resistance
+        self.INIT_TIMEOUT = 5  # The amount of seconds to wait for Arduino to initialize
+        self.NUM_ANALOG = 6    # 6 max possible analog pins
 #############################################################################################
         
         # Misc. variable setup, don't touch
-        self.calc = calculations.calculations(self.Vcc, self.pulldown)
-        
         self.recordings = 0
         self.curr_rec_count = 0
         
@@ -75,6 +65,8 @@ class FSR:
 
     # Reset variables for plotting
     def reset_vars(self):
+        self.calc = calculations.calculations(self.Vcc.get(), self.pulldown.get())
+
         self.times = []
         self.resistor_data_raw = []
         self.resistor_data = []
@@ -129,7 +121,7 @@ class FSR:
             self.logger.log("Arduino initialized, starting recording #%i of this session" % self.recordings)
             self.logger.log("Currently recording to file: %s" % self.SAVE_FILE)
             self.save_data("; Recording @ 50 Hz\n")
-            self.save_data("; Vcc = %.02f V, pulldown = %i Ohm\n" % (self.Vcc, self.pulldown))
+            self.save_data("; Vcc = %.02f V, pulldown = %i Ohm\n" % (self.Vcc.get(), self.pulldown.get()))
             self.save_data("; Key: time (ms), pin (A0-5), readout (0-1023)\n")
 
             self.check_rec_pins()
@@ -262,6 +254,33 @@ class FSR:
         self.y_low_entry = Tk.Entry(master=self.controls_frame, textvariable=self.Y_RANGE_LOW, width=6)
         self.y_high_entry = Tk.Entry(master=self.controls_frame, textvariable=self.Y_RANGE_HIGH, width=6)
         self.scaling_label_under = Tk.Label(master=self.controls_frame, text="(Empty = auto-scaling)")
+
+        # Misc. settings
+        self.settings_frame = Tk.LabelFrame(master=self.panel_left, text="Misc. settings", pady=10)
+
+        self.COM_PORT = Tk.StringVar()
+        self.COM_PORT.set("COM5")
+
+        self.com_label = Tk.Label(master=self.settings_frame, text="COM port:")
+        self.com_entry = Tk.Entry(master=self.settings_frame, textvariable=self.COM_PORT, width=8)
+        
+        self.BAUD_RATE = Tk.IntVar()
+        self.BAUD_RATE.set(500000)
+
+        self.baud_label = Tk.Label(master=self.settings_frame, text="Baud rate:")
+        self.baud_entry = Tk.Entry(master=self.settings_frame, textvariable=self.BAUD_RATE, width=8)
+
+        self.Vcc = Tk.DoubleVar()
+        self.Vcc.set(5.06)
+
+        self.Vcc_label = Tk.Label(master=self.settings_frame, text="Vcc:")
+        self.Vcc_entry = Tk.Entry(master=self.settings_frame, textvariable=self.Vcc, width=8)
+        
+        self.pulldown = Tk.IntVar()
+        self.pulldown.set(10000)
+
+        self.pulldown_label = Tk.Label(master=self.settings_frame, text="Pulldown:")
+        self.pulldown_entry = Tk.Entry(master=self.settings_frame, textvariable=self.pulldown, width=8)
         
         # Setup the grid within panel_left
         self.rec_start_btn.grid(row=0, column=0, columnspan=2)
@@ -278,9 +297,19 @@ class FSR:
 
         self.unit_select_label.grid(row=9, column=0, columnspan=2, pady=(10, 0))
         self.unit_select_opts.grid(row=10, column=0, columnspan=2)
+
+        self.com_label.grid(row=0, column=0)
+        self.com_entry.grid(row=0, column=1)
+        self.baud_label.grid(row=1, column=0)
+        self.baud_entry.grid(row=1, column=1)
+        self.Vcc_label.grid(row=2, column=0)
+        self.Vcc_entry.grid(row=2, column=1)
+        self.pulldown_label.grid(row=3, column=0)
+        self.pulldown_entry.grid(row=3, column=1)
         
         self.status_frame.grid(row=0, column=0, sticky="nsew")
-        self.controls_frame.grid(row=1, column=0, sticky="nsew", pady=10)
+        self.controls_frame.grid(row=1, column=0, sticky="nsew", pady=(10,0))
+        self.settings_frame.grid(row=2, column=0, sticky="nsew", pady=10)
 
         self.panel_left.grid(row=0, column=0, sticky="nw", padx=10, pady=10)
 
@@ -368,7 +397,7 @@ class FSR:
                 return False
             
             try:
-                self.ser = serial.Serial(self.COM_PORT, self.BAUD_RATE)
+                self.ser = serial.Serial(self.COM_PORT.get(), self.BAUD_RATE.get())
                 break
             except serial.serialutil.SerialException as e:
                 if (millis() - timer) >= 1000: # Give an error every second
@@ -383,8 +412,11 @@ class FSR:
 
             if not self.recording:
                 return False
-            
-            data_in = self.ser.readline()
+
+            try:
+                data_in = self.ser.readline()
+            except Exception as e:
+                self.logger.log(e)
 
             if len(data_in) > 0:
                 try:

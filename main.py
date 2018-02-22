@@ -9,6 +9,7 @@
 import matplotlib
 matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.ticker import FuncFormatter
 import matplotlib.pyplot as plt
 import tkinter as Tk
 import time, serial, calculations, logger
@@ -404,7 +405,7 @@ class FSR:
         self.data_plot.set_autoscale_on(True)
         self.data_plot.set_title("Sensor Data\n")
         self.data_plot.set_ylabel(self.y_unit.get())
-        self.data_plot.set_xlabel("Time (ms)")
+        self.data_plot.set_xlabel("Time")
 
         # Instantiate a line in the graph for every pin we could potentially read
         for i in range(0, self.NUM_ANALOG):
@@ -609,6 +610,7 @@ class FSR:
                     break
 
             self.data_plot.set_title("Sensor data\nRecording: %s\n" % timerunning(time.time() - self.__rec_start__))
+            self.data_plot.xaxis.set_major_formatter(FuncFormatter(lambda x, pos: timerunning(x / 1000)))
             self.do_auto_scale()
 
             # Speeds up drawing tremendously

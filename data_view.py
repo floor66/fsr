@@ -1,17 +1,31 @@
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FuncFormatter
+from utils import timerunning
 
-f = open("sensordata/data_1518607640_2.txt")
-lines = f.readlines()
-
+##
+to_show = "resists"
+fn = "data_1519214887_3"
 FREQ = 50
 MOD_DIV = 1/50 # Show only every x seconds
+GAP_THRESHOLD = 5000 # delete gaps greater than 5 sec (likely artefacts, see Figures/Data_artefacts
+##
 
+f = open("sensordata/%s.txt" % fn.replace("annotations", "data"))
+data_lines = f.readlines()
+
+try:
+    f = open("sensordata/%s.txt" % fn.replace("data", "annotations"))
+    annot_lines = f.readlines()
+except FileNotFoundError:
+    annot_lines = []
+
+# Get data + convert to val/volt/resist
 ts = []
 vals = []
 volts = []
 resists = []
 i = 0
-for l in lines:
+for l in data_lines:
     i += 1
     
     if l[0] != ";":
@@ -36,6 +50,31 @@ for l in lines:
                         volts.append(0)
                         resists.append(None)
 
+# Remove gaps
+gaps = []
+print("Gaps:")
+
+for i, t in enumerate(ts):
+    if i > 1:
+        d = abs(ts[i] - ts[i - 1])
+        
+        if d > GAP_THRESHOLD:
+            print("%i - %i = %i" % (ts[i], ts[i - 1], d))
+            gaps.append(ts[i])
+            gaps.append(ts[i - 1])
+
+for t in gaps:
+    try:
+        i = ts.index(t)
+    except ValueError:
+        continue
+    
+    ts.pop(i)
+    vals.pop(i)
+    volts.pop(i)
+    resists.pop(i)
+
+# Averages
 vals_avg = [None]
 volts_avg = [None]
 resists_avg = [None]
@@ -54,6 +93,7 @@ for i, val in enumerate(vals):
             volts_avg.append(voltage)
             resists_avg.append(r)
 
+# Moving average
 N = 50 * 20 # mavg window, 50/sec
 vals_mavg = [None for i in range(N)]
 volts_mavg = [None for i in range(N)]
@@ -74,20 +114,45 @@ for i, val in enumerate(vals):
                 volts_mavg.append(voltage)
                 resists_mavg.append(r)
 
-to_show = "vals"
+raw = eval("%s" % to_show)
 avg = eval("%s_avg" % to_show)
 mavg = eval("%s_mavg" % to_show)
 
-if len(ts) > len(avg):
+if len(ts) < len(avg):
     avg = avg[:len(ts)]
+elif len(ts) > len(avg):
+    ts = ts[:len(avg)]
 
-if len(ts) > len(mavg):
+if len(ts) < len(mavg):
     mavg = mavg[:len(ts)]
+elif len(ts) > len(mavg):
+    ts = ts[:len(mavg)]
 
-plt.plot([t/60000 for t in ts], eval(to_show), "b-")
-plt.plot([t/60000 for t in ts], avg, "r-")
-plt.plot([t/60000 for t in ts], mavg, "m-", linewidth=2.0)
-#plt.xlim(, ts[-1]/60000)
-#plt.ylim(0, 1024)
+raw = raw[:len(ts)]
+
+# Format tickers
+def the_time(x, pos):
+    return timerunning(x / 1000)
+
+formatter = FuncFormatter(the_time)
+
+# Plot data
+fig, ax = plt.subplots()
+ax.xaxis.set_major_formatter(formatter)
+
+#ax.plot(ts, raw, "b-")
+ax.plot(ts, avg, "r-")
+ax.plot(ts, mavg, "m-", linewidth=2.0)
+
+# Plot annotations
+if len(annot_lines) > 0:
+    for l in annot_lines:
+        t, msg = l.split(",")
+
+        ax.axvline(x=int(t), color="#000000", linewidth=2)
+        ax.text(t, 0, " %s" % msg, fontsize=16)
+
+#plt.xlim(183, 184)
+plt.ylim(0, 10**6)
 plt.grid()
 plt.show()

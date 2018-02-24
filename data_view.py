@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
-from utils import timerunning
+from utils import timerunning, millis
 
 ##
 to_show = "resists"
@@ -10,6 +10,7 @@ MOD_DIV = 1/50 # Show only every x seconds
 GAP_THRESHOLD = 5000 # delete gaps greater than 5 sec (likely artefacts, see Figures/Data_artefacts
 ##
 
+__start__ = millis()
 f = open("sensordata/%s.txt" % fn.replace("annotations", "data"))
 data_lines = f.readlines()
 
@@ -143,16 +144,61 @@ ax.xaxis.set_major_formatter(formatter)
 #ax.plot(ts, raw, "b-")
 ax.plot(ts, avg, "r-")
 ax.plot(ts, mavg, "m-", linewidth=2.0)
+nots = []
 
 # Plot annotations
 if len(annot_lines) > 0:
     for l in annot_lines:
         t, msg = l.split(",")
 
-        ax.axvline(x=int(t), color="#000000", linewidth=2)
-        ax.text(t, 0, " %s" % msg, fontsize=16)
+        nots.append(ax.axvline(x=int(t), color="#000000", linewidth=1, linestyle="dashed"))
+
+# Bind hover event for annotations
+def hover(e):
+    global __start__
+    
+    if ((millis() - __start__) < 50):
+        return
+    else:
+        __start__ = millis()
+    
+    c = False
+    
+    for line in nots:
+        if line.get_linestyle() != "dashed":
+            line.set_linestyle("dashed")
+            line.set_linewidth(1)
+            c = True
+
+        if e.inaxes == ax:
+            cont, ind = line.contains(e)
+
+            if cont:
+                line.set_linestyle("solid")
+                line.set_linewidth(2)
+                c = True
+
+    if c:
+        fig.canvas.draw_idle()
 
 #plt.xlim(183, 184)
 plt.ylim(0, 10**6)
+
+def scroll(e):
+    dir_ = e.button
+    xlim = ax.get_xlim()
+    xwidth = xlim[1] - xlim[0]
+    xstep = round(xwidth * 0.1)
+
+    if dir_ == "up":
+        ax.set_xlim(left=xlim[0] + xstep, right=xlim[1] + xstep)
+    elif dir_ == "down":
+        ax.set_xlim(left=xlim[0] - xstep, right=xlim[1] - xstep)
+
+    fig.canvas.draw_idle()
+    
+fig.canvas.mpl_connect("motion_notify_event", hover)
+fig.canvas.mpl_connect("scroll_event", scroll)
+
 plt.grid()
 plt.show()

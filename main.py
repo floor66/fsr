@@ -413,7 +413,7 @@ class FSR:
             self.plot_lines.append(tmp)
 
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.canvas_container)
-        self.canvas.show()
+        self.canvas.draw()
         self.canvas.get_tk_widget().pack(fill=Tk.BOTH, expand=1)
 
         self.canvas_container.grid(row=0, column=1, sticky="nesw")
@@ -432,7 +432,7 @@ class FSR:
             try:
                 self.ser = serial.Serial(self.COM_PORT.get(), self.BAUD_RATE.get())
                 break
-            except serial.serialutil.SerialException as e:
+            except serial.SerialException as e:
                 if (millis() - timer) >= 1000: # Give an error every second
                     self.status("Connect Arduino to USB!")
                     self.logger.log("Connect Arduino to USB!")

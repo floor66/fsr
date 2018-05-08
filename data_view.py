@@ -5,12 +5,17 @@ import numpy as np
 
 ##
 to_show = "resists"
-fns = ("data_1524744912_5", "data_1524744912_8")
+fns = ("data_1523548673_5", "data_1523548673_8", "data_1523548673_10", "data_1524744912_5", "data_1524744912_8")
+wires = ("Ethilon 2-0 (12 april)", "PDS-II 2-0 (12 april)", "Mesh-suture (12 april)",
+         "Ethilon 2-0 (26 april)", "Mesh-suture (26 april)")
 FREQ = 50
 MOD_DIV = 1/50 # Show only every x seconds
 GAP_THRESHOLD = 5000 # delete gaps greater than 5 sec (likely artefacts, see Figures/Data_artefacts
+MAVG_WIND = 50 * 20 # Window for moving average (50 * 20 = 1 sec)
 ##
 
+fig = None
+art = []
 for fn in fns:
     __start__ = millis()
     f = open("sensordata/%s.txt" % fn.replace("annotations", "data"))
@@ -97,7 +102,7 @@ for fn in fns:
                 resists_avg.append(r)
 
     # Moving average
-    N = 50 * 20 # mavg window, 50/sec
+    N = MAVG_WIND # mavg window
     vals_mavg = [None for i in range(N)]
     volts_mavg = [None for i in range(N)]
     resists_mavg = [None for i in range(N)]
@@ -140,16 +145,20 @@ for fn in fns:
     formatter = FuncFormatter(the_time)
 
     # Plot data
-    fig, ax = plt.subplots()
+    if fig is None:
+        fig, ax = plt.subplots()
+        
     ax.xaxis.set_major_formatter(formatter)
     
     #raw = [-r if r is not None else None for r in raw]
     #avg = [-a if a is not None else None for a in avg]
     #mavg = [-m if m is not None else None for m in mavg]
 
-    ax.plot(ts, raw, "b-")
-    ax.plot(ts, avg, "r-")
-    ax.plot(ts, mavg, "m-", linewidth=2.0)
+    #a, = ax.plot(ts, raw)
+    #a, = ax.plot(ts, avg)
+    a, = ax.plot(ts, mavg)
+
+    art.append(a)
     nots = []
     msgs = []
 
@@ -158,14 +167,9 @@ for fn in fns:
         for l in annot_lines:
             t, msg = l.split(",")
 
-            nots.append(ax.axvline(x=int(t), color="#000000", linewidth=1, linestyle="dashed"))
+            nots.append(ax.axvline(x=int(t), color=a.get_color(), linewidth=1, linestyle="dashed"))
             msgs.append(ax.text(int(t), 0, " %s" % msg, fontsize=16))
             
-    plt.xlim(0, 1920 * 1000)
-    plt.ylim(4400, 6800)
-    plt.grid()
-    plt.gca().invert_yaxis()
-
     # Bind hover event for annotations
     def hover(e):
         global __start__
@@ -222,4 +226,9 @@ for fn in fns:
     #fig.canvas.mpl_connect("motion_notify_event", hover)
     fig.canvas.mpl_connect("scroll_event", scroll)
 
+plt.xlim(0, 1920 * 1000)
+plt.ylim(3500, 7000)
+plt.grid()
+plt.gca().invert_yaxis()
+plt.legend(art, wires)
 plt.show()

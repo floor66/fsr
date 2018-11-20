@@ -22,6 +22,7 @@ class FSR:
 ####### User defined variables ##############################################################
         self.INIT_TIMEOUT = 5  # The amount of seconds to wait for Arduino to initialize
         self.NUM_ANALOG = 6    # 6 max possible analog pins
+        self.MEASURE_FRQ = 100 # Measurement frequency (Hz)
 #############################################################################################
         
         # Misc. variable setup, don't touch
@@ -104,6 +105,7 @@ class FSR:
             
         self.rec_stop_btn.configure(state="disabled")
         self.rec_start_btn.configure(state="normal")
+        self.root.focus() # Remove focus from the start button, could cause problems when trying to annotate
         self.status("Recording stopped")
 
     def rec_start(self):
@@ -112,6 +114,7 @@ class FSR:
 
         self.rec_start_btn.configure(state="disabled")
         self.rec_stop_btn.configure(state="normal")
+        self.root.focus() # Remove focus from the start button, could cause problems when trying to annotate
 
         # Check if we can initiate the serial communication
         if self.init_serial():
@@ -126,7 +129,7 @@ class FSR:
 
             self.logger.log("Arduino initialized, starting recording #%i of this session" % self.recordings)
             self.logger.log("Currently recording to file: %s" % self.SAVE_FILE)
-            self.save_data("; Recording @ 50 Hz\n")
+            self.save_data("; Recording @ %i Hz\n" % self.MEASURE_FRQ)
             self.save_data("; Vcc = %.02f V, pulldown = %i Ohm\n" % (self.Vcc.get(), self.pulldown.get()))
             self.save_data("; Key: time (ms), pin (A0-5), readout (0-1023)\n")
 
@@ -197,8 +200,9 @@ class FSR:
         self.reset_vars()
 
     def add_annotation(self, e):
-        if len(self.SHOW_PINS) == 0:
-            self.logger.log("Can't add a annotation if no data is being shown")
+        check = sum([len(s) for s in self.times])
+        if check == 0:
+            self.logger.log("Can't add an annotation if no data is being shown")
             return
             
         t = self.times[self.SHOW_PINS[0]][-1]
@@ -256,7 +260,7 @@ class FSR:
 
         # Graph refresh scale
         self.REFRESH_MS = Tk.IntVar()
-        self.REFRESH_MS.set(250)
+        self.REFRESH_MS.set(500)
             
         self.refresh_entry = Tk.Scale(master=self.controls_frame, length=150, from_=1, to=1000, resolution=25, label="Graph refreshrate (ms)", orient=Tk.HORIZONTAL, variable=self.REFRESH_MS)
 
@@ -292,13 +296,13 @@ class FSR:
         self.settings_frame = Tk.LabelFrame(master=self.panel_left, text="Misc. settings", pady=10)
 
         self.COM_PORT = Tk.StringVar()
-        self.COM_PORT.set("COM5")
+        self.COM_PORT.set("COM4")
 
         self.com_label = Tk.Label(master=self.settings_frame, text="COM port:")
         self.com_entry = Tk.Entry(master=self.settings_frame, textvariable=self.COM_PORT, width=8)
         
         self.BAUD_RATE = Tk.IntVar()
-        self.BAUD_RATE.set(500000)
+        self.BAUD_RATE.set(128000)
 
         self.baud_label = Tk.Label(master=self.settings_frame, text="Baud rate:")
         self.baud_entry = Tk.Entry(master=self.settings_frame, textvariable=self.BAUD_RATE, width=8)

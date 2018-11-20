@@ -11,13 +11,13 @@ int sensorPins[] = {0, 1, 2, 3, 4, 5};
 unsigned long timers[] = {0, 0, 0, 0, 0, 0};
 int sensorVal = 0;
 int sensorCount = sizeof(sensorPins) / sizeof(int);
-int MEASUREMENT_FREQ = 50; // Measurement frequency (Hz)
+int MEASUREMENT_FREQ = 100; // Measurement frequency (Hz)
 unsigned long curr_t = 0;
 unsigned long tmp_t = 0;
 
 void setup()
 {
-  Serial.begin(500000);
+  Serial.begin(250000);
   Serial.println(" ");
 
   // Initialize pins

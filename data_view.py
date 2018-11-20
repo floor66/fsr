@@ -5,13 +5,15 @@ import numpy as np
 
 ##
 to_show = "resists"
-fns = ("data_1523548673_5", "data_1523548673_8", "data_1523548673_10", "data_1524744912_5", "data_1524744912_8")
-wires = ("Ethilon 2-0 (12 april)", "PDS-II 2-0 (12 april)", "Mesh-suture (12 april)",
-         "Ethilon 2-0 (26 april)", "Mesh-suture (26 april)")
-FREQ = 50
-MOD_DIV = 1/50 # Show only every x seconds
+fns = (  "data_1541493946_2", "data_1541493946_3", "data_1541493946_4", "data_1541501475_2", "data_1541501475_3", "data_1541501475_4",)
+wires = ("Mesh 1",            "Mesh 2",            "Mesh 3",            "PDSII 1",           "PDSII 2",           "PDSII 3",)
+#fns = ("data_1541493946_2", "data_1541493946_3", "data_1541493946_4", "data_1541501475_2", "data_1541501475_3", "data_1541501475_4")
+#wires = ("Mesh 1", "Mesh 2", "Mesh 3", "PDSII 1", "PDSII 2", "PDSII 3")
+
+FREQ = 10
+MOD_DIV = 1/10 # Show only every x seconds
 GAP_THRESHOLD = 5000 # delete gaps greater than 5 sec (likely artefacts, see Figures/Data_artefacts
-MAVG_WIND = 50 * 20 # Window for moving average (50 * 20 = 1 sec)
+MAVG_WIND = 1000 # Window for moving average (50 * 20 = 1 sec)
 ##
 
 fig = None
@@ -41,8 +43,14 @@ for fn in fns:
                 tmp = l.rstrip().split(",")
 
                 if len(tmp) == 3:
-                        t = int(tmp[0])
-                        v = int(tmp[2])
+                        try:
+                            t = int(tmp[0])
+                            v = int(tmp[2])
+                        except ValueError:
+                            continue
+
+                        if v > 15000:
+                            print("Off: %i" % t)
 
                         if v > 0:
                             voltage = (v * (5.06 / 1023))
@@ -226,8 +234,8 @@ for fn in fns:
     #fig.canvas.mpl_connect("motion_notify_event", hover)
     fig.canvas.mpl_connect("scroll_event", scroll)
 
-plt.xlim(0, 1920 * 1000)
-plt.ylim(3500, 7000)
+plt.xlim(0, 33 * 60 * 1000)
+plt.ylim(4000, 13000)
 plt.grid()
 plt.gca().invert_yaxis()
 plt.legend(art, wires)

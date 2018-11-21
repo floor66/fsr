@@ -4,20 +4,22 @@ from utils import timerunning, millis
 import numpy as np
 
 ##
-to_show = "resists"
-fns = (  "data_1541493946_2", "data_1541493946_3", "data_1541493946_4", "data_1541501475_2", "data_1541501475_3", "data_1541501475_4",)
-wires = ("Mesh 1",            "Mesh 2",            "Mesh 3",            "PDSII 1",           "PDSII 2",           "PDSII 3",)
-#fns = ("data_1541493946_2", "data_1541493946_3", "data_1541493946_4", "data_1541501475_2", "data_1541501475_3", "data_1541501475_4")
-#wires = ("Mesh 1", "Mesh 2", "Mesh 3", "PDSII 1", "PDSII 2", "PDSII 3")
+to_show = "newtons"
+display_type = "raw"
 
-FREQ = 10
+fns =       ("data_1541493946_2", "data_1541493946_3", "data_1541493946_4", "data_1541501475_2", "data_1541501475_3", "data_1541501475_4",)
+wires =     ("Mesh 1",            "Mesh 2",            "Mesh 3",            "PDSII 1",           "PDSII 2",           "PDSII 3",)
+baselines = (250408,              121808,              121404,              174708,              67504,               114404,)
+
+FREQ = 10 # Measuring frequency
 MOD_DIV = 1/10 # Show only every x seconds
-GAP_THRESHOLD = 5000 # delete gaps greater than 5 sec (likely artefacts, see Figures/Data_artefacts
-MAVG_WIND = 1000 # Window for moving average (50 * 20 = 1 sec)
+GAP_THRESHOLD = 2000 # delete gaps greater than x msec (likely artefacts, see Figures/Data_artefacts
+MAVG_WIND = 1000 # Msec window for moving average (50 * 20 = 1 sec)
 ##
 
 fig = None
 art = []
+INDEX = 0
 for fn in fns:
     __start__ = millis()
     f = open("sensordata/%s.txt" % fn.replace("annotations", "data"))
@@ -34,6 +36,7 @@ for fn in fns:
     vals = []
     volts = []
     resists = []
+    newtons = []
     i = 0
     for l in data_lines:
         i += 1
@@ -55,16 +58,19 @@ for fn in fns:
                         if v > 0:
                             voltage = (v * (5.06 / 1023))
                             r = 10000 * ((5.06 / voltage) - 1)
+                            n = (96892 * (r**-1.292)) * 9.8066500286389
                             
                             ts.append(t)
                             vals.append(v)
                             volts.append(voltage)
                             resists.append(r)
+                            newtons.append(n)
                         else:
                             ts.append(t)
                             vals.append(0)
                             volts.append(0)
                             resists.append(None)
+                            newtons.append(None)
 
     # Remove gaps
     gaps = []
@@ -89,11 +95,13 @@ for fn in fns:
         vals.pop(i)
         volts.pop(i)
         resists.pop(i)
+        newtons.pop(i)
 
     # Averages
     vals_avg = [None]
     volts_avg = [None]
     resists_avg = [None]
+    newtons_avg = [None]
     sum_ = 0
 
     for i, val in enumerate(vals):
@@ -105,15 +113,18 @@ for fn in fns:
             if sum_ > 0:
                 voltage = ((sum_ / i) * (5.06 / 1023))
                 r = 10000 * ((5.06 / voltage) - 1)
+                n = (96892 * (r**-1.292)) * 9.8066500286389
 
                 volts_avg.append(voltage)
                 resists_avg.append(r)
+                newtons_avg.append(n)
 
     # Moving average
     N = MAVG_WIND # mavg window
     vals_mavg = [None for i in range(N)]
     volts_mavg = [None for i in range(N)]
     resists_mavg = [None for i in range(N)]
+    newtons_mavg = [None for i in range(N)]
     sum_ = [0]
 
     for i, val in enumerate(vals):
@@ -126,9 +137,11 @@ for fn in fns:
                 if (sum_[i - 1] + val) > 0:
                     voltage = (((sum_[i] - sum_[i - N]) / N) * (5.06 / 1023))
                     r = 10000 * ((5.06 / voltage) - 1) if voltage > 0 else 0
+                    n = (96892 * (r**-1.292)) * 9.8066500286389 if voltage > 0 else 0
 
                     volts_mavg.append(voltage)
                     resists_mavg.append(r)
+                    newtons_mavg.append(n)
 
     raw = eval("%s" % to_show)
     avg = eval("%s_avg" % to_show)
@@ -157,14 +170,23 @@ for fn in fns:
         fig, ax = plt.subplots()
         
     ax.xaxis.set_major_formatter(formatter)
-    
+
+    #This is for inverting data:
     #raw = [-r if r is not None else None for r in raw]
     #avg = [-a if a is not None else None for a in avg]
     #mavg = [-m if m is not None else None for m in mavg]
 
-    #a, = ax.plot(ts, raw)
-    #a, = ax.plot(ts, avg)
-    a, = ax.plot(ts, mavg)
+    # Normalizing data
+    base = ts.index(baselines[INDEX])
+    
+    raw = [r - raw[base] for r in raw]
+    a, = ax.plot(ts, raw)
+    if display_type == "avg":
+        avg = [r - avg[base] for r in avg]
+        a, = ax.plot(ts, avg)
+    elif display_type == "mavg":
+        mavg = [r - mavg[base] for r in mavg]
+        a, = ax.plot(ts, mavg)
 
     art.append(a)
     nots = []
@@ -177,6 +199,8 @@ for fn in fns:
 
             nots.append(ax.axvline(x=int(t), color=a.get_color(), linewidth=1, linestyle="dashed"))
             msgs.append(ax.text(int(t), 0, " %s" % msg, fontsize=16))
+
+    INDEX += 1
             
     # Bind hover event for annotations
     def hover(e):
@@ -210,7 +234,7 @@ for fn in fns:
         dir_ = e.button
         xlim = ax.get_xlim()
         xwidth = xlim[1] - xlim[0]
-        xstep = round(xwidth * 0.1)
+        xstep = round(xwidth * 0.01)
 
         if dir_ == "up":
             ax.set_xlim(left=xlim[0] + xstep, right=xlim[1] + xstep)
@@ -235,8 +259,10 @@ for fn in fns:
     fig.canvas.mpl_connect("scroll_event", scroll)
 
 plt.xlim(0, 33 * 60 * 1000)
-plt.ylim(4000, 13000)
+plt.ylim(-2, 4)
 plt.grid()
-plt.gca().invert_yaxis()
+#plt.gca().invert_yaxis()
 plt.legend(art, wires)
+plt.ylabel("Change in force (delta-N)")
+plt.xlabel("Time (h:mm:ss)")
 plt.show()

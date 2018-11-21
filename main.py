@@ -22,7 +22,7 @@ class FSR:
 ####### User defined variables ##############################################################
         self.INIT_TIMEOUT = 5  # The amount of seconds to wait for Arduino to initialize
         self.NUM_ANALOG = 6    # 6 max possible analog pins
-        self.MEASURE_FRQ = 100 # Measurement frequency (Hz)
+        self.MEASURE_FRQ = 10  # Measurement frequency (Hz)
 #############################################################################################
         
         # Misc. variable setup, don't touch
@@ -129,7 +129,7 @@ class FSR:
 
             self.logger.log("Arduino initialized, starting recording #%i of this session" % self.recordings)
             self.logger.log("Currently recording to file: %s" % self.SAVE_FILE)
-            self.save_data("; Recording @ %i Hz\n" % self.MEASURE_FRQ)
+            self.save_data("; Recording @ %i Hz, Baud rate %i\n" % (self.MEASURE_FRQ, self.BAUD_RATE.get()))
             self.save_data("; Vcc = %.02f V, pulldown = %i Ohm\n" % (self.Vcc.get(), self.pulldown.get()))
             self.save_data("; Key: time (ms), pin (A0-5), readout (0-1023)\n")
 

@@ -1,22 +1,17 @@
 import numpy as np
+import matplotlib.pyplot as plt
+from calculations import calculations
 
-fn = "data_1524744912_8"
-wire = "Ethilon 2-0"
-#wire = "PDS-II"
-wire = "Mesh-suture"
+fn = "data_1541493946_2"
+wire = "Mesh"
 
-baseline_t_start = 0
-baseline_t_end = 1
+fn = "data_1541501475_2"
+wire = "PDSII 2-0"
 
-comp_t_start = 1
-comp_t_end = 31
+fig = None
+calc = calculations(5.06, 10000)
 
 with open("sensordata/%s.txt" % fn) as f:
-    baseline_t_start *= 60000
-    baseline_t_end *= 60000
-    comp_t_start *= 60000
-    comp_t_end *= 60000
-
     # Load data
     data_lines = f.readlines()
     ts = []
@@ -36,22 +31,13 @@ with open("sensordata/%s.txt" % fn) as f:
     vals = np.array(vals)
     volts = (vals * (5.06 / 1023))
     resists = 10000 * ((5.06 / volts) - 1)
+    newtons = np.array([calc.val_to_N(v) for v in vals])
 
-    baseline_t_start = 0
-    baseline_t_end = np.where(ts == baseline_t_end)[0][0]
-    comp_t_start = np.where(ts == comp_t_start)[0][0]
-    comp_t_end = np.where(ts == comp_t_end)[0][0]
+    newtons_n = [n - newtons[0] for n in newtons]
 
-    baseline = np.mean(
-        vals[baseline_t_start:baseline_t_end]
-        )
-    comp = np.mean(
-        vals[comp_t_start:comp_t_end]
-        )
-    
-    print(wire)
-    print("Baseline value = %.4f" % baseline)
-    print("End value      = %.4f" % comp)
-    print("Factor         = %.4f" % (comp / baseline))
-    print("1/Factor       = %.4f" % (baseline / comp))
-    print("Difference     = %.4f" % (comp - baseline))
+    if fig is None:
+        fig, ax = plt.subplots()
+
+    ax.plot(ts, newtons_n)
+    #ax.plot(newtons_d)
+    plt.show()

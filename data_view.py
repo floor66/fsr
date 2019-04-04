@@ -2,26 +2,71 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
 from utils import timerunning, millis
 import numpy as np
+from scipy import signal
+from math import sqrt
+
+trials = []
+wires = []
 
 ##
-to_show = "newtons"
+plot_annot = False
+to_show = "vals"
 display_type = "raw"
+run_stats = False
 
-fns =       ("data_1541493946_2", "data_1541493946_3", "data_1541493946_4", "data_1541501475_2", "data_1541501475_3", "data_1541501475_4",)
-wires =     ("Mesh 1",            "Mesh 2",            "Mesh 3",            "PDSII 1",           "PDSII 2",           "PDSII 3",)
-baselines = (250408,              121808,              121404,              174708,              67504,               114404,)
+trials.append(("Varkens april/data_1554215695_4", "Mesh porcine 1", 63204))
+trials.append(("Varkens april/data_1554215695_5", "Mesh porcine 1", 244208))
 
+#trials.append(("varken/data_1548877691_2", "PDSII 2-0 porcine 1", 129904))
+#trials.append(("varken/data_1548877691_3", "PDSII 2-0 porcine valid 2", 129208))
+
+"""
+trials.append(("data_1541493946_2", "Mesh 1", 250408))
+trials.append(("data_1541493946_3", "Mesh 2", 121808))
+trials.append(("data_1541493946_4", "Mesh 3", 121404))
+trials.append(("data_1542112623_1", "Mesh 4", 118704))
+trials.append(("data_1542112623_2", "Mesh 5", 117208))
+trials.append(("data_1542112623_4", "Mesh 6", 23208))
+trials.append(("data_1542704461_1", "Mesh 7", 315304))
+trials.append(("data_1542710800_1", "Mesh 8", 124008))
+trials.append(("data_1542718474_1", "Mesh 9", 129604))
+trials.append(("data_1543304291_1", "Mesh 10", 120704))
+trials.append(("data_1543308523_1", "Mesh 11", 171204))
+trials.append(("data_1543308523_2", "Mesh 12", 126604))
+
+trials.append(("data_1541501475_2", "PDSII 1", 174708))
+trials.append(("data_1541501475_3", "PDSII 2", 67504))
+trials.append(("data_1541501475_4", "PDSII 3", 114404))
+trials.append(("data_1542276705_1", "PDSII 4", 30708))
+trials.append(("data_1542276705_2", "PDSII 5", 182804))
+trials.append(("data_1542276705_3", "PDSII 6", 198104))
+trials.append(("data_1542891862_2", "PDSII 7", 114204))
+trials.append(("data_1542895007_2", "PDSII 8", 120904))
+trials.append(("data_1542895007_3", "PDSII 9", 120804))
+trials.append(("data_1543308523_3", "PDSII 10", 130504))
+trials.append(("data_1543308523_4", "PDSII 11", 120408))
+trials.append(("data_1543308523_5", "PDSII 12", 180608))
+
+trials.append(("data_1544520811_1", "PDSII validering 1", 120704))
+trials.append(("data_1544520811_2", "PDSII validering 2", 120804))
+trials.append(("data_1544520811_3", "PDSII validering 3", 120208))
+"""
 FREQ = 10 # Measuring frequency
-MOD_DIV = 1/10 # Show only every x seconds
+SHOW_EVERY = 1 # Show only every x measurements
 GAP_THRESHOLD = 2000 # delete gaps greater than x msec (likely artefacts, see Figures/Data_artefacts
 MAVG_WIND = 1000 # Msec window for moving average (50 * 20 = 1 sec)
 ##
 
+raws = []
+
+# Note: Iterate through trials and append a new trial for each sensor
+
 fig = None
 art = []
-INDEX = 0
-for fn in fns:
+for fn, wire, baseline in trials:
     __start__ = millis()
+    wires.append(wire)
+
     f = open("sensordata/%s.txt" % fn.replace("annotations", "data"))
     data_lines = f.readlines()
 
@@ -42,35 +87,37 @@ for fn in fns:
         i += 1
         
         if l[0] != ";":
-            if ((i % (FREQ * MOD_DIV)) == 0) or (i == 1):
-                tmp = l.rstrip().split(",")
+            tmp = l.rstrip().split(",")
 
-                if len(tmp) == 3:
-                        try:
-                            t = int(tmp[0])
-                            v = int(tmp[2])
-                        except ValueError:
-                            continue
+            if len(tmp) == 3:
+                try:
+                    t = int(tmp[0])
+                    v = int(tmp[2])
+                except ValueError:
+                    continue
 
-                        if v > 15000:
-                            print("Off: %i" % t)
+                if v > 1023:
+                    print("Off: %i at %i in %s" % (v, t, fn))
 
-                        if v > 0:
-                            voltage = (v * (5.06 / 1023))
-                            r = 10000 * ((5.06 / voltage) - 1)
-                            n = (96892 * (r**-1.292)) * 9.8066500286389
-                            
-                            ts.append(t)
-                            vals.append(v)
-                            volts.append(voltage)
-                            resists.append(r)
-                            newtons.append(n)
-                        else:
-                            ts.append(t)
-                            vals.append(0)
-                            volts.append(0)
-                            resists.append(None)
-                            newtons.append(None)
+                if v > 0:
+                    voltage = (v * (5.06 / 1023))
+                    r = 10000 * ((5.06 / voltage) - 1)
+                    n = (96892 * (r**-1.292)) * 9.8066500286389
+                    
+                    ts.append(t)
+                    vals.append(v)
+                    volts.append(voltage)
+                    resists.append(r)
+                    newtons.append(n)
+                else:
+                    ts.append(t)
+                    vals.append(0)
+                    volts.append(0)
+                    resists.append(None)
+                    newtons.append(None)
+
+    # Get base tension
+    base = ts.index(baseline)
 
     # Remove gaps
     gaps = []
@@ -170,38 +217,42 @@ for fn in fns:
         fig, ax = plt.subplots()
         
     ax.xaxis.set_major_formatter(formatter)
-
-    #This is for inverting data:
-    #raw = [-r if r is not None else None for r in raw]
-    #avg = [-a if a is not None else None for a in avg]
-    #mavg = [-m if m is not None else None for m in mavg]
-
-    # Normalizing data
-    base = ts.index(baselines[INDEX])
     
-    raw = [r - raw[base] for r in raw]
-    a, = ax.plot(ts, raw)
-    if display_type == "avg":
-        avg = [r - avg[base] for r in avg]
-        a, = ax.plot(ts, avg)
+    # Normalizing & drawing data
+    col = "blue" if wire.find("valid") > -1 else "red"
+    filter_n = 25
+    a = None
+
+    if display_type == "raw":
+        # For relative measurements
+        for i, r in enumerate(raw):
+            if r is None:
+                raw[i] = 0
+        
+        raw = [r - raw[base] for r in raw]
+
+        #a, = ax.plot(ts[base::SHOW_EVERY], raw[base::SHOW_EVERY], col)
+        a, = ax.plot(ts[base::SHOW_EVERY], signal.lfilter([1.0 / filter_n] * filter_n, 1, raw[base::SHOW_EVERY]), col)
+        #raws.append(np.array(raw[base::SHOW_EVERY]))
+    elif display_type == "avg":
+        avg[1:] = [a - avg[base] for a in avg[1:]]
+        a, = ax.plot(ts, avg, col)
     elif display_type == "mavg":
-        mavg = [r - mavg[base] for r in mavg]
-        a, = ax.plot(ts, mavg)
+        mavg = [m - mavg[base] for m in mavg]
+        a, = ax.plot(ts, mavg, col)
 
     art.append(a)
     nots = []
     msgs = []
 
     # Plot annotations
-    if len(annot_lines) > 0:
+    if (len(annot_lines) > 0) and plot_annot:
         for l in annot_lines:
             t, msg = l.split(",")
 
             nots.append(ax.axvline(x=int(t), color=a.get_color(), linewidth=1, linestyle="dashed"))
             msgs.append(ax.text(int(t), 0, " %s" % msg, fontsize=16))
 
-    INDEX += 1
-            
     # Bind hover event for annotations
     def hover(e):
         global __start__
@@ -258,11 +309,68 @@ for fn in fns:
     #fig.canvas.mpl_connect("motion_notify_event", hover)
     fig.canvas.mpl_connect("scroll_event", scroll)
 
+if run_stats:
+    # Statistics
+    stats = []
+    averages = []
+    times = []
+    confidence = []
+
+    MESH = 0
+    stats.append((0, 12))
+
+    PDS = 1
+    stats.append((12, 24))
+
+    PDS_V = 2
+    stats.append((24, 27))
+
+    for a, b in stats:
+        subset_raws = raws[a:b]
+        print(len(subset_raws))
+        L = min([len(r) for r in subset_raws])
+        time = ts[0:L]
+        subset_raws = [r[0:L] for r in subset_raws]
+
+        all_data = [[] for i in range(L)]
+        for i, line in enumerate(subset_raws):
+            for j, point in enumerate(line):
+                all_data[j].append(point)
+
+        subset_avg = [np.mean(np.array(a)) for a in all_data]
+        subset_std = [np.std(np.array(a)) for a in all_data]
+        subset_sem = [std / sqrt(len(subset_raws)) for std in subset_std]
+        ci_subset_upper = [subset_avg[i] + (1.96 * subset_sem[i]) for i in range(len(subset_avg))]
+        ci_subset_lower = [subset_avg[i] - (1.96 * subset_sem[i]) for i in range(len(subset_avg))]
+
+        times.append(time)
+        averages.append(subset_avg)
+        confidence.append((ci_subset_lower, ci_subset_upper))
+
+    # Plot what needs to be plotted
+    filter_n = 25
+    i = MESH
+    ax.plot(times[i], signal.lfilter([1.0 / filter_n] * filter_n, 1, averages[i]), "blue")
+    ax.plot(times[i], signal.lfilter([1.0 / filter_n] * filter_n, 1, confidence[i][0]), "black")
+    ax.plot(times[i], signal.lfilter([1.0 / filter_n] * filter_n, 1, confidence[i][1]), "black")
+
+    i = PDS
+    ax.plot(times[i], signal.lfilter([1.0 / filter_n] * filter_n, 1, averages[i]), "red")
+    ax.plot(times[i], signal.lfilter([1.0 / filter_n] * filter_n, 1, confidence[i][0]), "grey")
+    ax.plot(times[i], signal.lfilter([1.0 / filter_n] * filter_n, 1, confidence[i][1]), "grey")
+
+    i = PDS_V
+    ax.plot(times[i], signal.lfilter([1.0 / filter_n] * filter_n, 1, averages[i]), "blue")
+    ax.plot(times[i], signal.lfilter([1.0 / filter_n] * filter_n, 1, confidence[i][0]), "black")
+    ax.plot(times[i], signal.lfilter([1.0 / filter_n] * filter_n, 1, confidence[i][1]), "black")
+
 plt.xlim(0, 33 * 60 * 1000)
-plt.ylim(-2, 4)
+#plt.ylim(0, 16)
 plt.grid()
 #plt.gca().invert_yaxis()
-plt.legend(art, wires)
-plt.ylabel("Change in force (delta-N)")
+#plt.legend(art, wires)
+plt.ylabel("Force (N)")
 plt.xlabel("Time (h:mm:ss)")
+plt.title("Suture tension over 30 mins at 20 mmHg intra-abdominal pressure in a porcine abdominal wall\nPDS II 2-0 (N = 2)\n")
 plt.show()
+

@@ -10,47 +10,15 @@ wires = []
 
 ##
 plot_annot = False
-to_show = "vals"
+to_show = "newtons"
 display_type = "raw"
 run_stats = False
 
-trials.append(("Varkens april/data_1554215695_4", "Mesh porcine 1", 63204))
-trials.append(("Varkens april/data_1554215695_5", "Mesh porcine 1", 244208))
+trials.append(("20190402 Varken serie/Buik 1/data_1554215695_4", "Buik 1 Mesh L trial 1", 63204, 1))
+trials.append(("20190402 Varken serie/Buik 1/data_1554215695_4", "Buik 1 Mesh S trial 1", 63204, 2))
+trials.append(("20190402 Varken serie/Buik 1/data_1554215695_5", "Buik 1 Mesh S trial 2", 244208, 1))
+trials.append(("20190402 Varken serie/Buik 1/data_1554215695_5", "Buik 1 Mesh L trial 2", 244208, 2))
 
-#trials.append(("varken/data_1548877691_2", "PDSII 2-0 porcine 1", 129904))
-#trials.append(("varken/data_1548877691_3", "PDSII 2-0 porcine valid 2", 129208))
-
-"""
-trials.append(("data_1541493946_2", "Mesh 1", 250408))
-trials.append(("data_1541493946_3", "Mesh 2", 121808))
-trials.append(("data_1541493946_4", "Mesh 3", 121404))
-trials.append(("data_1542112623_1", "Mesh 4", 118704))
-trials.append(("data_1542112623_2", "Mesh 5", 117208))
-trials.append(("data_1542112623_4", "Mesh 6", 23208))
-trials.append(("data_1542704461_1", "Mesh 7", 315304))
-trials.append(("data_1542710800_1", "Mesh 8", 124008))
-trials.append(("data_1542718474_1", "Mesh 9", 129604))
-trials.append(("data_1543304291_1", "Mesh 10", 120704))
-trials.append(("data_1543308523_1", "Mesh 11", 171204))
-trials.append(("data_1543308523_2", "Mesh 12", 126604))
-
-trials.append(("data_1541501475_2", "PDSII 1", 174708))
-trials.append(("data_1541501475_3", "PDSII 2", 67504))
-trials.append(("data_1541501475_4", "PDSII 3", 114404))
-trials.append(("data_1542276705_1", "PDSII 4", 30708))
-trials.append(("data_1542276705_2", "PDSII 5", 182804))
-trials.append(("data_1542276705_3", "PDSII 6", 198104))
-trials.append(("data_1542891862_2", "PDSII 7", 114204))
-trials.append(("data_1542895007_2", "PDSII 8", 120904))
-trials.append(("data_1542895007_3", "PDSII 9", 120804))
-trials.append(("data_1543308523_3", "PDSII 10", 130504))
-trials.append(("data_1543308523_4", "PDSII 11", 120408))
-trials.append(("data_1543308523_5", "PDSII 12", 180608))
-
-trials.append(("data_1544520811_1", "PDSII validering 1", 120704))
-trials.append(("data_1544520811_2", "PDSII validering 2", 120804))
-trials.append(("data_1544520811_3", "PDSII validering 3", 120208))
-"""
 FREQ = 10 # Measuring frequency
 SHOW_EVERY = 1 # Show only every x measurements
 GAP_THRESHOLD = 2000 # delete gaps greater than x msec (likely artefacts, see Figures/Data_artefacts
@@ -59,11 +27,9 @@ MAVG_WIND = 1000 # Msec window for moving average (50 * 20 = 1 sec)
 
 raws = []
 
-# Note: Iterate through trials and append a new trial for each sensor
-
 fig = None
 art = []
-for fn, wire, baseline in trials:
+for fn, wire, baseline, sensor in trials:
     __start__ = millis()
     wires.append(wire)
 
@@ -92,8 +58,13 @@ for fn, wire, baseline in trials:
             if len(tmp) == 3:
                 try:
                     t = int(tmp[0])
+                    s = int(tmp[1])
                     v = int(tmp[2])
                 except ValueError:
+                    continue
+
+                # s + 1 to prevent confusion (sensor 1 = 0, sensor 2 = 1, etc.)
+                if (s + 1) != sensor:
                     continue
 
                 if v > 1023:
@@ -117,7 +88,11 @@ for fn, wire, baseline in trials:
                     newtons.append(None)
 
     # Get base tension
-    base = ts.index(baseline)
+    base = None
+    for i, t in enumerate(ts):
+        if t >= baseline:
+            base = i
+            break
 
     # Remove gaps
     gaps = []
@@ -219,7 +194,7 @@ for fn, wire, baseline in trials:
     ax.xaxis.set_major_formatter(formatter)
     
     # Normalizing & drawing data
-    col = "blue" if wire.find("valid") > -1 else "red"
+    col = "blue" if wire.find("Mesh L") > -1 else "red"
     filter_n = 25
     a = None
 
@@ -368,9 +343,9 @@ plt.xlim(0, 33 * 60 * 1000)
 #plt.ylim(0, 16)
 plt.grid()
 #plt.gca().invert_yaxis()
-#plt.legend(art, wires)
+plt.legend(art, wires)
 plt.ylabel("Force (N)")
 plt.xlabel("Time (h:mm:ss)")
-plt.title("Suture tension over 30 mins at 20 mmHg intra-abdominal pressure in a porcine abdominal wall\nPDS II 2-0 (N = 2)\n")
+plt.title("Suture tension over 30 mins at 20 mmHg intra-abdominal pressure in a porcine abdominal wall\n")
 plt.show()
 

@@ -1,3 +1,5 @@
 sensordata/
 __pycache__/
 logs/
+.vscode/
+env/

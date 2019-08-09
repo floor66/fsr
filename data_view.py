@@ -1,24 +1,27 @@
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 from matplotlib.ticker import FuncFormatter
 from utils import timerunning, millis
 import numpy as np
 from scipy import signal
-from math import sqrt
+from scipy.stats import *
+from math import sqrt, floor
 
-trials = []
+from data_input import trials
 wires = []
+stats = []
 
 ##
 plot_annot = False
 to_show = "newtons"
 display_type = "raw"
-run_stats = False
-
-trials.append(("20190402 Varken serie/Buik 1/data_1554215695_4", "Buik 1 Mesh L trial 1", 63204, 1))
-trials.append(("20190402 Varken serie/Buik 1/data_1554215695_4", "Buik 1 Mesh S trial 1", 63204, 2))
-trials.append(("20190402 Varken serie/Buik 1/data_1554215695_5", "Buik 1 Mesh S trial 2", 244208, 1))
-trials.append(("20190402 Varken serie/Buik 1/data_1554215695_5", "Buik 1 Mesh L trial 2", 244208, 2))
-
+##
+run_stats = True
+show_pvals = False
+show_bands = False
+stats.append((0, len(trials) // 2))
+stats.append((len(trials) // 2, len(trials)))
+##
 FREQ = 10 # Measuring frequency
 SHOW_EVERY = 1 # Show only every x measurements
 GAP_THRESHOLD = 2000 # delete gaps greater than x msec (likely artefacts, see Figures/Data_artefacts
@@ -96,7 +99,6 @@ for fn, wire, baseline, sensor in trials:
 
     # Remove gaps
     gaps = []
-    print("Gaps:")
 
     for i, t in enumerate(ts):
         if i > 1:
@@ -183,7 +185,8 @@ for fn, wire, baseline, sensor in trials:
 
     # Format tickers
     def the_time(x, pos):
-        return timerunning(x / 1000)
+        global SHOW_EVERY
+        return timerunning(x / 1000 * SHOW_EVERY)
 
     formatter = FuncFormatter(the_time)
 
@@ -194,7 +197,7 @@ for fn, wire, baseline, sensor in trials:
     ax.xaxis.set_major_formatter(formatter)
     
     # Normalizing & drawing data
-    col = "blue" if wire.find("Mesh L") > -1 else "red"
+    col = "blue" if wire.find("PDS L") > -1 else "red"
     filter_n = 25
     a = None
 
@@ -207,8 +210,8 @@ for fn, wire, baseline, sensor in trials:
         raw = [r - raw[base] for r in raw]
 
         #a, = ax.plot(ts[base::SHOW_EVERY], raw[base::SHOW_EVERY], col)
-        a, = ax.plot(ts[base::SHOW_EVERY], signal.lfilter([1.0 / filter_n] * filter_n, 1, raw[base::SHOW_EVERY]), col)
-        #raws.append(np.array(raw[base::SHOW_EVERY]))
+        #a, = ax.plot(ts[base::SHOW_EVERY], signal.lfilter([1.0 / filter_n] * filter_n, 1, raw[base::SHOW_EVERY]), col)
+        raws.append(np.array(raw[base::SHOW_EVERY]))
     elif display_type == "avg":
         avg[1:] = [a - avg[base] for a in avg[1:]]
         a, = ax.plot(ts, avg, col)
@@ -286,19 +289,11 @@ for fn, wire, baseline, sensor in trials:
 
 if run_stats:
     # Statistics
-    stats = []
     averages = []
+    medians = []
     times = []
     confidence = []
-
-    MESH = 0
-    stats.append((0, 12))
-
-    PDS = 1
-    stats.append((12, 24))
-
-    PDS_V = 2
-    stats.append((24, 27))
+    all_datas = []
 
     for a, b in stats:
         subset_raws = raws[a:b]
@@ -313,39 +308,97 @@ if run_stats:
                 all_data[j].append(point)
 
         subset_avg = [np.mean(np.array(a)) for a in all_data]
-        subset_std = [np.std(np.array(a)) for a in all_data]
-        subset_sem = [std / sqrt(len(subset_raws)) for std in subset_std]
-        ci_subset_upper = [subset_avg[i] + (1.96 * subset_sem[i]) for i in range(len(subset_avg))]
-        ci_subset_lower = [subset_avg[i] - (1.96 * subset_sem[i]) for i in range(len(subset_avg))]
+        subset_med = [np.median(np.array(a)) for a in all_data]
 
+        if show_bands:
+            ci_subset_upper = [np.percentile(np.array(a), 75) for a in all_data]
+            ci_subset_lower = [np.percentile(np.array(a), 25) for a in all_data]
+            
+            #subset_std = [np.std(np.array(a)) for a in all_data]
+            #subset_sem = [std / sqrt(len(subset_raws)) for std in subset_std]
+            #ci_subset_upper = [subset_avg[i] + (1.96 * subset_sem[i]) for i in range(len(subset_avg))]
+            #ci_subset_lower = [subset_avg[i] - (1.96 * subset_sem[i]) for i in range(len(subset_avg))]
+
+            confidence.append((ci_subset_lower, ci_subset_upper))
+
+        all_datas.append(all_data)
         times.append(time)
         averages.append(subset_avg)
-        confidence.append((ci_subset_lower, ci_subset_upper))
+        medians.append(subset_med)
+
+    # Voor elk meetpunt -> test doen
+    pvals = []
+    pval_times = []
+
+    L = min([len(all_datas[0]), len(all_datas[1])])
+    PVAL_EVERY = 600 # 10 = 1 sec, 600 = 1 min
+    for i in range(0, floor(L / PVAL_EVERY)):
+        try:
+            a = all_datas[0][i * PVAL_EVERY + 1]
+            b = all_datas[1][i * PVAL_EVERY + 1]
+            stat, pval = ranksums(a, b)
+            pvals.append(pval)
+            pval_times.append(times[0][i * PVAL_EVERY + 1])
+
+            #print("Median %i, series 0: %.4f" % (i, np.median(np.array(a))))
+            #print(" - 25th pct: %.4f; 75th pct: %.4f" % (np.percentile(np.array(a), 25), np.percentile(np.array(a), 75)))
+            #print("Median %i, series 1: %.4f" % (i, np.median(np.array(b))))
+            #print(" - 25th pct: %.4f; 75th pct: %.4f" % (np.percentile(np.array(b), 25), np.percentile(np.array(b), 75)))
+
+        except ValueError:
+            pass
+
+    print(len(pvals))
 
     # Plot what needs to be plotted
-    filter_n = 25
-    i = MESH
-    ax.plot(times[i], signal.lfilter([1.0 / filter_n] * filter_n, 1, averages[i]), "blue")
-    ax.plot(times[i], signal.lfilter([1.0 / filter_n] * filter_n, 1, confidence[i][0]), "black")
-    ax.plot(times[i], signal.lfilter([1.0 / filter_n] * filter_n, 1, confidence[i][1]), "black")
+    filter_n = 5000
 
-    i = PDS
-    ax.plot(times[i], signal.lfilter([1.0 / filter_n] * filter_n, 1, averages[i]), "red")
-    ax.plot(times[i], signal.lfilter([1.0 / filter_n] * filter_n, 1, confidence[i][0]), "grey")
-    ax.plot(times[i], signal.lfilter([1.0 / filter_n] * filter_n, 1, confidence[i][1]), "grey")
+    colors = ["red", "blue"]
 
-    i = PDS_V
-    ax.plot(times[i], signal.lfilter([1.0 / filter_n] * filter_n, 1, averages[i]), "blue")
-    ax.plot(times[i], signal.lfilter([1.0 / filter_n] * filter_n, 1, confidence[i][0]), "black")
-    ax.plot(times[i], signal.lfilter([1.0 / filter_n] * filter_n, 1, confidence[i][1]), "black")
+    for i in range(len(stats)):
+        ax.plot(times[i], signal.lfilter([1.0 / filter_n] * filter_n, 1, medians[i]), colors[i])
 
-plt.xlim(0, 33 * 60 * 1000)
-#plt.ylim(0, 16)
+        if show_bands:
+            ax.plot(times[i], signal.lfilter([1.0 / filter_n] * filter_n, 1, confidence[i][0]), "grey", linestyle="dashed", linewidth=0.5)
+            ax.plot(times[i], signal.lfilter([1.0 / filter_n] * filter_n, 1, confidence[i][1]), "grey", linestyle="dashed", linewidth=0.5)
+            ax.fill_between(times[i], \
+                signal.lfilter([1.0 / filter_n] * filter_n, 1, confidence[i][0]), signal.lfilter([1.0 / filter_n] * filter_n, 1, confidence[i][1]), \
+                color=colors[i], alpha=0.2)
+
+ax.set_xlim(0, 30 * 60 * 1000)
+#ax.set_ylim(0, 16)
+
+plt.legend(handles=[mpatches.Patch(color="red", label="Small bites (5x5), n = 12"), \
+    mpatches.Patch(color="blue", label="Large bites (10x10), n = 12"), \
+    mpatches.Patch(color="black", alpha=0.2, label="Significant difference (p < 0.05)")])
+
+plt.title("Suture tension over 30 mins at 20 mmHg IAP in six porcine abdominal walls\n")
 plt.grid()
-#plt.gca().invert_yaxis()
-plt.legend(art, wires)
-plt.ylabel("Force (N)")
-plt.xlabel("Time (h:mm:ss)")
-plt.title("Suture tension over 30 mins at 20 mmHg intra-abdominal pressure in a porcine abdominal wall\n")
+ax.set_ylabel("Change in force (N)")
+ax.set_xlabel("Time (h:mm:ss)")
+
+if show_pvals:
+    ax2 = ax.twinx()
+    ax2.set_ylabel("p-value")
+    ax2.axhline(0.05, color="black")
+    ax2.plot(pval_times, pvals, color="green")
+
+# Code for drawing significant (p < 0.05) shading in the graph
+a = None
+b = None
+for i, pval in enumerate(pvals):
+    if a is None and pval < 0.05:
+        a = pval_times[i]
+    elif a is not None and pval >= 0.05:
+        b = pval_times[i]
+
+    if a is not None and b is not None:
+        ax.axvspan(a, b, alpha=0.2, color="black")
+        a = None
+        b = None
+
+if a is not None and b is None:
+    ax.axvspan(a, ax.get_xlim()[1], alpha=0.2, color="black")
+
 plt.show()
 
